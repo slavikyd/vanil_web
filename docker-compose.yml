@@ -1,0 +1,12 @@
+services:
+  bot:
+    build: .
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - WEBAPP_URL=${WEBAPP_URL}
+    env_file:
+      - .env
+    ports:
+      - "8001:8001"
+    command: >
+      sh -c "poetry run python bot/main.py & poetry run uvicorn bot.web_app:app --host 0.0.0.0 --port 8001"
