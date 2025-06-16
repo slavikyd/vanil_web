@@ -1,0 +1,207 @@
+/* General body styles */
+body {
+  overflow-x: hidden;
+  background-color: white !important;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Page container to center the main content block */
+.page-container {
+  margin: 25px; /* Default margin around the content block */
+  padding: 0; /* Remove padding here, let cards manage their internal padding */
+  max-width: 600px; /* Crucial for centering the content block on larger screens */
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box; /* Include padding in the total width */
+}
+
+/* Grid layout for displaying cards (applies to both product list and orders) */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Default to single column for small screens */
+  gap: 0.1rem;
+  margin-bottom: 3rem;
+}
+
+/* Media queries for responsive grid columns */
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr); /* Two columns on medium screens */
+  }
+}
+
+@media (min-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr); /* Three columns on large screens */
+  }
+}
+
+/* Individual card styling - general properties */
+.card {
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Lighter shadow for cards */
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  width: 100%; /* Card fills its grid cell */
+  max-width: 400px; /* Prevent individual cards from becoming too wide */
+  box-sizing: border-box;
+  margin: auto; /* Centers card within its grid cell if max-width is hit */
+  align-self: center; /* Vertically centers card within its grid cell */
+
+  padding: 5px; /* Internal padding for the card content */
+  border: 1px solid #eee; /* Light border around each card */
+  margin-bottom: 7.5px; /* Space between cards */
+
+  /* IMPORTANT: Remove the flex properties from the general .card here */
+  /* display: flex; */
+  /* align-items: center; */
+  /* justify-content: space-between; */
+}
+
+/* --- Specific styles for the product listing cards (only where needed) --- */
+/* You need to apply these flex properties to a more specific selector
+   if your product listing cards have a parent container different from the general .card,
+   or add a new class to them. For now, let's assume they are structured differently
+   or you will add a wrapper div around the content that needs flex.
+
+   Since your product listing HTML directly had the strong and quantity-selector
+   as direct children of .card, we will target them. This makes it more specific
+   to the product listing page's card structure.
+*/
+.page-container .grid .card { /* This targets cards specifically inside the product page's structure */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+
+/* Styling for the item name within the product listing card */
+.page-container .grid .card strong {
+  flex-grow: 1; /* Allows the name to take up available space */
+  margin-right: 10px;
+  white-space: nowrap; /* Prevents text from wrapping */
+  overflow: hidden; /* Hides overflowing text */
+  text-overflow: ellipsis; /* Adds "..." for truncated text */
+  min-width: 0; /* Allows text to shrink */
+  flex-shrink: 1; /* Allows the strong tag to shrink if needed */
+}
+
+/* Styling for the quantity selector group (- 0 +) on the product listing page */
+.page-container .grid .card .quantity-selector {
+  flex-shrink: 0; /* Prevents the selector from shrinking */
+  display: flex; /* Makes buttons and input a flex container */
+  align-items: center; /* Vertically aligns elements within the selector */
+}
+
+/* Styling for quantity buttons (general, applies to product list) */
+.quantity-selector button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ccc;
+  background: #f0f0f0;
+  cursor: pointer;
+  border-radius: 4px; /* Slightly rounded corners for buttons */
+  font-size: 1rem; /* Adjust font size for readability */
+}
+
+/* Styling for the quantity input field (general, applies to product list) */
+.quantity-selector input[type="number"] {
+  width: 50px;
+  height: 30px;
+  text-align: center;
+  border: 1px solid #ccc;
+  margin: 0 5px;
+  border-radius: 4px; /* Slightly rounded corners for input */
+}
+/* For Chrome, Safari, Edge, Opera */
+.quantity-selector input::-webkit-outer-spin-button,
+.quantity-selector input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+
+/* Other general styles */
+p {
+  text-align: center;
+}
+
+h1, h2, h3, h4 { /* Added h1, h3, h4 for consistency */
+  text-align: center;
+}
+
+/* Specific styles for the "Place Order" button */
+.place-order-button {
+  align-self: center; /* No effect without display: flex/grid on parent */
+  text-align: center;
+  margin: 5%;
+  padding: 5%;
+  background-color: #686868;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: block; /* Make it a block element to take full width of its container for text-align to work */
+  margin-left: auto; /* Center block element */
+  margin-right: auto; /* Center block element */
+  max-width: 200px; /* Limit button width for better appearance */
+}
+
+.place-order-button:hover {
+  background-color: #383b3d;
+}
+
+/* Link as button style for "Back to Home" */
+.actions .button { /* Target the anchor tag with class 'button' inside 'actions' */
+    display: inline-block; /* Make it behave like a button */
+    padding: 10px 15px; /* Adjust padding as needed */
+    background-color: #f0f0f0; /* Light grey background */
+    color: #333; /* Darker text color */
+    border: 1px solid #ccc; /* Border */
+    border-radius: 5px;
+    text-decoration: none; /* Remove underline */
+    text-align: center;
+    cursor: pointer;
+    font-size: 1rem;
+    margin-top: 0.5rem; /* Your inline style */
+}
+
+.actions .button:hover {
+    background-color: #e0e0e0;
+}
+
+
+/* Media query for smaller screens on .item (likely related to current order display) */
+@media (max-width: 899px) {
+  .item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .item button.remove {
+    width: 100%;
+    margin-top: 0.75rem;
+  }
+}
+
+/* Styles specific to order details within the card on the "All Orders" page */
+.card .meta div {
+    margin-bottom: 5px; /* Space out the meta information */
+}
+
+.card .items-list {
+    list-style: disc; /* Use bullet points */
+    padding-left: 20px; /* Indent the list */
+    margin-top: 10px;
+    margin-bottom: 0;
+}
+
+.card .items-list li {
+    margin-bottom: 3px; /* Space between list items */
+}
+
+.card h4 { /* Content heading in order card */
+    text-align: left; /* Align to the left within the card */
+    margin-top: 0;
+    margin-bottom: 5px;
+}

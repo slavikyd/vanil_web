@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Все заявки</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif">
+    <h1>Все заявки: </h1>
+    <div class="actions", style="padding-top: 0.5rem;">
+        <!-- <button href="/">← Back to Home</button> -->
+
+        <a class="button" href="/", style="padding-top: 0.5rem;">← На главную</a>
+    </div>
+    {% if orders %}
+    <div class="grid">
+        {% for order in orders %}
+        <div class="card">
+            <div class="meta">
+                <!-- <div><strong>Order ID:</strong> {{ order["id"] }}</div> -->
+                <div><strong>Создано:</strong> {{ order["created"] }}</div>
+                <div><strong>Кассир:</strong> {{ order["cashier_name"] }}</div>
+                <div><strong>Адрес:</strong> {{ order["address"] }}</div>
+                <!-- <div><strong>Shop ID:</strong> {{ order["shop"] }}</div> -->
+            </div>
+            <br>
+            <h4>Содержимое:</h4>
+            <ul class="items-list">
+                {% for item in order["items"] %}
+                <li class="item">
+                    <span>{{ item["name"] }}</span> — 
+                    <span>Кол-во: {{ item["quantity"] }}</span>
+                    <!-- <span>${{ item["price"] }}</span> -->
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Нет заявок.</p>
+    {% endif %}
+
+    <div class="actions", style="padding-top: 0.5rem;">
+        <!-- <button href="/">← Back to Home</button> -->
+
+        <a class="button" href="/", style="padding-top: 0.5rem;">← На главную</a>
+    </div>
+</body>
+</html>

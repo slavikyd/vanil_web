@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Админ — Все заявки</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif">
+
+    <h1 style="text-align: center;">Все заявки</h1>
+
+    <form method="get" action="/admin/orders" style="text-align: center; margin-bottom: 2em;">
+        <input type="text" name="address" placeholder="Фильтр по адресу" value="{{ address or '' }}">
+        <button type="submit">Фильтровать</button>
+        <br>
+        <a href="/admin/orders/export{% if address %}?address={{ address }}{% endif %}" style="margin-left: 1em;">Экспорт в Excel</a>
+    </form>
+
+    {% for order in orders %}
+        <div style="border: 1px solid #ddd; border-radius: 5px; padding: 1em; margin: 1em auto; width: 90%; max-width: 600px;">
+            <p><strong>ID заказа:</strong> {{ order.id }}</p>
+            <p><strong>Дата создания:</strong> {{ order.created }}</p>
+            <p><strong>Адрес:</strong> {{ order.address }}</p>
+            <p><strong>Кассир:</strong> {{ order.cashier_name }}</p>
+            <ul>
+                {% for item in order['items'] %}
+                    <li>{{ item.name }} — {{ item.quantity }} шт.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% else %}
+        <p style="text-align: center;">Заявок не найдено.</p>
+    {% endfor %}
+
+    <div style="text-align: center; margin-top: 2em;">
+        <a href="/">На главную</a>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq
+    ports:
+      - "5672:5672"      # AMQP protocol port
+      - "15672:15672"    # Management UI (в браузере http://localhost:15672)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  web:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/code
+    depends_on:
+      - db
+      - rabbitmq
+    env_file:
+      - .env
+
+  migrate:
+    build:
+      context: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: ${DB_URL_MIGRATIONS}
+    command: >
+      poetry run yoyo apply --batch --database ${DB_URL_MIGRATIONS} migrations
+
+volumes:
+  db_data:

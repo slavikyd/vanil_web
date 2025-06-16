@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Панель администратора — Товары</title>
+</head>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<body style="font-family: Arial, Helvetica, sans-serif">
+    <h1>Управление позициями</h1>
+    <p><a href="/">← Назад</a></p>
+    <h4 style="margin-top: 20px; align-self: left; text-align: left;">Добавить новый товар</h4>
+    <form method="post" style="align-self: center; align-items: center;">
+
+<form method="post" action="/admin/items/create" style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px;">
+    <input type="text" name="name" placeholder="Название" required style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; width: 70%; margin-bottom: 2%;">
+    <br>
+    <input type="number" name="price" step="0.01" placeholder="Цена" required style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; width: 70%; margin-bottom: 2%;">
+    <br>
+    <input type="number" name="ttl" placeholder="Срок (дней)" required style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; width: 70%; margin-bottom: 2%;">
+    <br>
+    <button type="submit" style="padding: 6px 12px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; width: 74%; margin-bottom: 2%;">Добавить</button>
+</form>
+        <button type="submit" style="margin-bottom: 2%;">Сохранить</button>
+        <table style="align-self: center;" border="1" cellpadding="8">
+            <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>Активна</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <!-- <td>{{ item.price }}</td> -->
+                    <td>
+                        <input type="checkbox" name="active_{{ item.id }}" {% if item.active %}checked{% endif %}>
+                    </td>
+                    <td>
+    <form method="post" action="/admin/items/delete" onsubmit="return confirm('Удалить этот товар?');">
+        <input type="hidden" name="item_id" value="{{ item.id }}">
+        <button type="submit">Удалить</button>
+    </form>
+</td>
+
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit">Сохранить</button>
+    </form>
+    <p><a href="/">← Назад</a></p>
+</body>
+</html>

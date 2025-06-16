@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "test"
+version = "0.1.0"
+description = ""
+authors = ["slavikyd <slavikyd@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.12"
+uvicorn = "^0.34.2"
+asyncpg = "^0.30.0"
+jinja2 = "^3.1.6"
+python-multipart = "^0.0.20"
+python-dotenv = "^1.1.0"
+psycopg2 = "^2.9.10"
+psycopg2-binary = "^2.9.10"
+itsdangerous = "^2.2.0"
+aio-pika = "^9.5.5"
+openpyxl = "^3.1.5"
+
+
+[tool.poetry.group.dev.dependencies]
+yoyo-migrations = "^9.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
