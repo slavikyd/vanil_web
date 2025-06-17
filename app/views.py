@@ -1,7 +1,7 @@
 import io
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 
 from asyncpg import Record
 from fastapi import APIRouter, Form, Request
@@ -10,11 +10,14 @@ from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
 from fastapi.templating import Jinja2Templates
 from openpyxl import Workbook
 from pydantic import BaseModel
+import openpyxl
+from io import BytesIO
+
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-# In-memory storage for carts keyed by session_id
+
 if not hasattr(router, "carts"):
     router.carts = {}
 
@@ -283,8 +286,12 @@ async def admin_items(request: Request):
 @router.post("/admin/items/toggle")
 async def toggle_item_activity(request: Request, item_id: int = Form(...), is_active: bool = Form(...)):
     cashier_id = get_cashier_id(request)
-    if cashier_id != "admin":
+    # if cashier_id != "admin":
+    #     return RedirectResponse("/", status_code=302)
+    cashier = await conn.fetchrow("SELECT is_admin FROM cashiers WHERE id = $1", cashier_id)
+    if not cashier or not cashier["is_admin"]:
         return RedirectResponse("/", status_code=302)
+
 
     async with request.app.state.db.acquire() as conn:
         await conn.execute("UPDATE items SET is_active = $1 WHERE id = $2", is_active, item_id)
@@ -293,50 +300,48 @@ async def toggle_item_activity(request: Request, item_id: int = Form(...), is_ac
 
 
 @router.get("/admin/orders", response_class=HTMLResponse)
-async def admin_orders(request: Request, address: str = None):
+async def admin_orders(request: Request):
     db = request.app.state.db
     async with db.acquire() as conn:
-        query = """
-            SELECT o.id, o.created, o.address, c.full_name AS cashier_name
+        rows = await conn.fetch("""
+            SELECT
+                o.id AS order_id,
+                o.order_for,
+                o.created,
+                o.address,
+                c.full_name AS cashier_name,
+                oi.quantity,
+                i.name AS item_name
             FROM orders o
             JOIN cashiers c ON o.cashier_id = c.id
-        """
-        params = []
-        if address:
-            query += " WHERE o.address ILIKE $1"
-            params.append(f"%{address}%")
-        query += " ORDER BY o.created DESC"
-
-        orders = await conn.fetch(query, *params)
-
-        result = []
-        for order in orders:
-            items = await conn.fetch("""
-                SELECT oi.quantity, i.name, i.price
-                FROM orders_items oi
-                JOIN items i ON i.id = oi.item_id
-                WHERE oi.order_id = $1
-            """, order["id"])
-
-            result.append({
-                "id": str(order["id"]),
-                "created": order["created"],
-                "address": order["address"],
-                "cashier_name": order["cashier_name"],
-                "items": [
-                    {
-                        "name": i["name"],
-                        "quantity": i["quantity"],
-                        "price": float(i["price"])
-                    } for i in items
-                ]
-            })
-
+            JOIN orders_items oi ON oi.order_id = o.id
+            JOIN items i ON oi.item_id = i.id
+            ORDER BY o.order_for DESC, o.created DESC
+        """)
+    grouped_orders = {}
+    for row in rows:
+        date = row["order_for"]
+        o_id = str(row["order_id"])
+        if date not in grouped_orders:
+            grouped_orders[date] = {}
+        if o_id not in grouped_orders[date]:
+            grouped_orders[date][o_id] = {
+                "id": o_id,
+                "created": row["created"],
+                "address": row["address"],
+                "cashier_name": row["cashier_name"],
+                "items": [],
+            }
+        grouped_orders[date][o_id]["items"].append({
+            "name": row["item_name"],
+            "quantity": row["quantity"],
+        })
     return templates.TemplateResponse("admin_orders.html", {
         "request": request,
-        "orders": result,
-        "address": address
+        "grouped_orders": grouped_orders
     })
+
+
 
 @router.get("/admin/orders/export")
 async def export_orders(address: str = None, request: Request = None):
@@ -403,3 +408,156 @@ async def export_orders(address: str = None, request: Request = None):
         }
 
         return StreamingResponse(stream, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+
+@router.get("/admin/export/by_address")
+async def export_by_address(order_for: date, request: Request):
+    db = request.app.state.db
+    async with db.acquire() as conn:
+        query = """
+            SELECT
+                o.address,
+                i.name AS item_name,
+                oi.quantity
+            FROM orders o
+            JOIN orders_items oi ON o.id = oi.order_id
+            JOIN items i ON oi.item_id = i.id
+            WHERE o.order_for = $1
+            ORDER BY o.address
+        """
+        rows = await conn.fetch(query, order_for)
+
+    # Создаём Excel-файл
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)  # Удаляем пустой первый лист
+
+    # Группируем по адресу
+    from collections import defaultdict
+    grouped = defaultdict(list)
+    for row in rows:
+        grouped[row["address"]].append((row["item_name"], row["quantity"]))
+
+    for address, items in grouped.items():
+        ws = wb.create_sheet(title=address[:31])  # Excel max 31 chars
+        ws.append(["Товар", "Количество"])
+        for name, qty in items:
+            ws.append([name, qty])
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={
+        "Content-Disposition": f"attachment; filename=by_address_{order_for}.xlsx"
+    })
+
+
+@router.get("/admin/export/all_items")
+async def export_all_items(order_for: date, request: Request):
+    db = request.app.state.db
+    async with db.acquire() as conn:
+        query = """
+            SELECT
+                o.id AS order_id,
+                i.name AS item_name,
+                oi.quantity,
+                o.address,
+                o.order_for
+            FROM orders o
+            JOIN orders_items oi ON o.id = oi.order_id
+            JOIN items i ON oi.item_id = i.id
+            WHERE o.order_for = $1
+            ORDER BY o.id, i.name;
+        """
+        rows = await conn.fetch(query, order_for)
+
+    # Create Excel workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "All Items by Order"
+    
+    # Set headers
+    ws.append([
+        "Order ID",
+        "Name of Item",
+        "Quantity",
+        "Address",
+        "Order Date"
+    ])
+
+    # Append data rows
+    for row in rows:
+        ws.append([
+            str(row["order_id"]),  # <-- FIX: Convert UUID to string
+            row["item_name"],
+            row["quantity"],
+            row["address"],
+            row["order_for"]
+        ])
+
+    # Prepare response
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=all_items_{order_for}.xlsx"
+        }
+    )
+
+
+@router.post("/admin/orders/delete")
+async def delete_order(request: Request, order_id: str = Form(...)):
+    """
+    Deletes an order and its associated items.
+    Requires admin privileges.
+    """
+    cashier_id = get_cashier_id(request)
+    db = request.app.state.db
+
+    logging.info(f"Attempting to delete order with ID: '{order_id}' by cashier ID: {cashier_id}")
+
+    # Defensive check: empty or missing order_id
+    if not order_id or not order_id.strip():
+        logging.error("No order_id provided in form submission.")
+        return HTMLResponse("Missing order ID.", status_code=400)
+
+    try:
+        # Convert order_id to UUID
+        order_uuid = uuid.UUID(order_id.strip())
+        logging.info(f"Successfully parsed order_id to UUID: {order_uuid}")
+    except ValueError:
+        logging.error(f"Invalid UUID format for order_id: {order_id}")
+        return HTMLResponse(f"Invalid order ID format: {order_id}", status_code=400)
+
+    async with db.acquire() as conn:
+        # Check if the user is an admin
+        cashier = await conn.fetchrow("SELECT is_admin FROM cashiers WHERE id = $1", cashier_id)
+        if not cashier or not cashier["is_admin"]:
+            logging.warning(f"Unauthorized delete attempt by cashier ID: {cashier_id}")
+            return RedirectResponse("/", status_code=302)
+
+        try:
+            # Start transaction
+            async with conn.transaction():
+                # Delete items
+                items_deleted = await conn.execute("DELETE FROM orders_items WHERE order_id = $1", order_uuid)
+                logging.info(f"Deleted from orders_items: {items_deleted}")
+
+                # Delete order
+                order_deleted = await conn.execute("DELETE FROM orders WHERE id = $1", order_uuid)
+                logging.info(f"Deleted from orders: {order_deleted}")
+
+            if order_deleted and "DELETE" in order_deleted:
+                logging.info(f"Successfully deleted order {order_uuid}")
+                return RedirectResponse("/admin/orders", status_code=302)
+            else:
+                logging.warning(f"No order deleted with ID {order_uuid}")
+                return HTMLResponse("Order not found or already deleted.", status_code=404)
+
+        except Exception as e:
+            logging.error(f"Error deleting order {order_id}: {e}", exc_info=True)
+            return HTMLResponse("Internal server error while deleting the order.", status_code=500)

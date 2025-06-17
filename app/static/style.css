@@ -205,3 +205,124 @@ h1, h2, h3, h4 { /* Added h1, h3, h4 for consistency */
     margin-top: 0;
     margin-bottom: 5px;
 }
+
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+    margin: 0;
+    padding: 1em;
+}
+
+h1, h2 {
+    text-align: center;
+    color: #1d2129;
+}
+
+.filter-form {
+    text-align: center;
+    margin-bottom: 2em;
+    background-color: #fff;
+    padding: 1.5em;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.filter-form input[type="text"] {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 1em;
+}
+
+.filter-form button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    background-color: #007bff;
+    color: white;
+    font-size: 1em;
+    cursor: pointer;
+}
+
+.filter-form button:hover {
+    background-color: #0056b3;
+}
+
+.orders-container {
+    max-width: 800px;
+    margin: 2em auto;
+}
+
+.order-card {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.order-card p {
+    margin: 0 0 10px 0;
+    font-size: 1.1em;
+}
+
+.order-card p strong {
+    font-weight: 600;
+}
+
+.order-card ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin-top: 10px;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+}
+
+.order-card li {
+    font-size: 1em;
+    padding-left: 1.2em; /* Indent for content */
+    position: relative;
+}
+
+.order-card li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #007bff; /* Optional: color the bullet point */
+    font-weight: bold;
+}
+
+
+.export-links {
+    text-align: center;
+    margin: 2em 0;
+    padding: 1.5em;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.export-links a {
+    margin: 0 15px;
+    color: #007bff;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.export-links a:hover {
+    text-decoration: underline;
+}
+
+.footer-link {
+    text-align: center;
+    margin-top: 2em;
+}
+
+.footer-link a {
+      color: #007bff;
+}

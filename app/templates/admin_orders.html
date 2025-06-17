@@ -1,40 +1,148 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
+    <meta charset="UTF-8">
     <title>Админ — Все заявки</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body {
+            padding: 0.5em;
+        }
+        .page-container {
+            margin: 10px auto;
+            max-width: 500px;
+            padding: 0 10px;
+        }
+        .delete-button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            background-color: #dc3545;
+            color: white;
+            font-size: 0.85em;
+            cursor: pointer;
+            margin-top: 10px;
+            align-self: flex-end;
+        }
+        .delete-button:hover {
+            background-color: #c82333;
+        }
+        .card {
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 0;
+        }
+        .card .meta div {
+            margin-bottom: 3px;
+            font-size: 0.95em;
+        }
+        .card .meta strong {
+            display: inline-block;
+            min-width: 70px;
+        }
+        .card h4 {
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-size: 1em;
+        }
+        .card .items-list {
+            padding-left: 15px;
+            margin-top: 5px;
+            padding-top: 5px;
+        }
+        .card .items-list li {
+            font-size: 0.95em;
+            padding-left: 1em;
+            margin-bottom: 2px;
+        }
+        .card-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+        .filter-form button, .export-links .button {
+            padding: 8px 16px;
+            font-size: 0.95em;
+        }
+        .filter-form input[type="date"], .filter-form input[type="text"] {
+            padding: 8px;
+            font-size: 0.95em;
+        }
+    </style>
 </head>
-<body style="font-family: Arial, Helvetica, sans-serif">
+<body>
+    <div class="page-container">
+        <h1>Все заявки</h1>
 
-    <h1 style="text-align: center;">Все заявки</h1>
+        <!-- Filter Form -->
+        <form method="get" action="/admin/orders" class="filter-form card">
+            <input type="date" name="order_for_date" value="{{ order_for_date or '' }}" class="p-2 border border-gray-300 rounded-md">
+            <input type="text" name="address" placeholder="Фильтр по адресу" value="{{ address or '' }}" class="p-2 border border-gray-300 rounded-md">
+            <button type="submit" class="p-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600">Фильтровать</button>
+        </form>
 
-    <form method="get" action="/admin/orders" style="text-align: center; margin-bottom: 2em;">
-        <input type="text" name="address" placeholder="Фильтр по адресу" value="{{ address or '' }}">
-        <button type="submit">Фильтровать</button>
-        <br>
-        <a href="/admin/orders/export{% if address %}?address={{ address }}{% endif %}" style="margin-left: 1em;">Экспорт в Excel</a>
-    </form>
+        <!-- Orders -->
+        {% for order_for, orders in grouped_orders.items() %}
+            <h2>Дата заявки: {{ order_for.strftime('%Y-%m-%d') }}</h2>
 
-    {% for order in orders %}
-        <div style="border: 1px solid #ddd; border-radius: 5px; padding: 1em; margin: 1em auto; width: 90%; max-width: 600px;">
-            <p><strong>ID заказа:</strong> {{ order.id }}</p>
-            <p><strong>Дата создания:</strong> {{ order.created }}</p>
-            <p><strong>Адрес:</strong> {{ order.address }}</p>
-            <p><strong>Кассир:</strong> {{ order.cashier_name }}</p>
-            <ul>
-                {% for item in order['items'] %}
-                    <li>{{ item.name }} — {{ item.quantity }} шт.</li>
+            <div class="grid">
+                {% for order_id_key, order in orders.items() %}
+                    <script>
+                        console.log("Loop Key (order_id_key): {{ order_id_key }}");
+                        console.log("Dictionary Value (order.id): {{ order.id }}");
+                    </script>
+                    <div class="card">
+                        <div class="meta">
+                            <div><strong>Создано:</strong> {{ order.created.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                            <div><strong>Кассир:</strong> {{ order.cashier_name }}</div>
+                            <div><strong>Адрес:</strong> {{ order.address }}</div>
+                            <div><strong>ID заявки (DEBUG):</strong> {{ order.id }}</div>
+                        </div>
+
+                        <h4>Содержимое:</h4>
+                        {% if order['items'] %}
+                            <ul class="items-list">
+                                {% for item in order['items'] %}
+                                    <li>{{ item.name }} — Кол-во: {{ item.quantity }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+
+                        <!-- Delete Form -->
+                        <div class="card-actions">
+                            {% if order.id %}
+                                <form id="deleteForm-{{ order.id | replace('-', '') }}" method="post" action="/admin/orders/delete"
+                                      onsubmit="return confirm('Вы уверены, что хотите удалить эту заявку?');">
+                                    <input type="hidden" name="order_id" value="{{ order.id }}">
+                                    <button type="submit" class="delete-button">Удалить заявку</button>
+                                </form>
+                            {% else %}
+                                <p style="color: red; font-size: 0.9em;">⚠️ Невозможно удалить заявку: отсутствует ID</p>
+                            {% endif %}
+                        </div>
+                    </div>
                 {% endfor %}
-            </ul>
-        </div>
-    {% else %}
-        <p style="text-align: center;">Заявок не найдено.</p>
-    {% endfor %}
+            </div>
 
-    <div style="text-align: center; margin-top: 2em;">
-        <a href="/">На главную</a>
+            <!-- Export links -->
+            <div class="export-links card text-center">
+                <a href="/admin/export/by_address?order_for={{ order_for }}" class="button">Экспорт по адресам (Excel)</a>
+                <a href="/admin/export/all_items?order_for={{ order_for }}" class="button">Экспорт всех позиций (Excel)</a>
+            </div>
+        {% endfor %}
+
+        <!-- Back button -->
+        <div class="actions">
+            <a href="/" class="button">← На главную</a>
+        </div>
     </div>
 
+    <script>
+        console.log("admin_orders.html JavaScript block loaded and executing.");
+    </script>
 </body>
 </html>
