@@ -213,10 +213,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    clearCartBtn.addEventListener('click', () => {
-        // Removed confirmation dialog as requested
-        sendClearCartRequest();
-    });
+    if (clearCartBtn) {
+        clearCartBtn.addEventListener('click', () => {
+            // Removed confirmation dialog as requested
+            sendClearCartRequest();
+        });
+    }
 
     const initialCart = JSON.parse('{{ cart | tojson }}');
     const initialItems = JSON.parse('{{ items | tojson }}');
@@ -316,10 +318,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
 
                     if (response.ok) {
-                        alert("Заявка успешно создана!");
-                        // Optionally clear cart and form after successful submission
-                        form.reset();
-                        sendClearCartRequest();
+                        await sendClearCartRequest(); // Ensure cart is cleared
+                        location.reload(); // Reload page
                     } else {
                         alert("Ошибка при создании заявки.");
                     }
