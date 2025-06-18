@@ -299,11 +299,40 @@ async def toggle_item_activity(request: Request, item_id: int = Form(...), is_ac
     return RedirectResponse("/admin/items", status_code=302)
 
 
+from datetime import datetime, date # Import date and datetime for type hints and parsing
+
 @router.get("/admin/orders", response_class=HTMLResponse)
 async def admin_orders(request: Request):
     db = request.app.state.db
+
+    order_for_date_str = request.query_params.get("order_for_date")
+    address_filter = request.query_params.get("address")
+
+    where_clauses: list = []
+    # Use a list for parameters, as asyncpg expects them positionally for fetch
+    query_args: list = []
+    param_counter = 1 # To keep track of $1, $2, etc.
+
+    if order_for_date_str:
+        try:
+            order_for_date = datetime.strptime(order_for_date_str, '%Y-%m-%d').date()
+            where_clauses.append(f"o.order_for = ${param_counter}")
+            query_args.append(order_for_date)
+            param_counter += 1
+        except ValueError:
+            print(f"Warning: Invalid date format received: {order_for_date_str}")
+
+    if address_filter:
+        where_clauses.append(f"o.address ILIKE ${param_counter}")
+        query_args.append(f"%{address_filter}%")
+        param_counter += 1
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = " WHERE " + " AND ".join(where_clauses)
+
     async with db.acquire() as conn:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(f"""
             SELECT
                 o.id AS order_id,
                 o.order_for,
@@ -316,8 +345,10 @@ async def admin_orders(request: Request):
             JOIN cashiers c ON o.cashier_id = c.id
             JOIN orders_items oi ON oi.order_id = o.id
             JOIN items i ON oi.item_id = i.id
+            {where_sql}
             ORDER BY o.order_for DESC, o.created DESC
-        """)
+        """, *query_args)
+
     grouped_orders = {}
     for row in rows:
         date = row["order_for"]
@@ -336,11 +367,13 @@ async def admin_orders(request: Request):
             "name": row["item_name"],
             "quantity": row["quantity"],
         })
+
     return templates.TemplateResponse("admin_orders.html", {
         "request": request,
-        "grouped_orders": grouped_orders
+        "grouped_orders": grouped_orders,
+        "order_for": order_for_date_str,
+        "address": address_filter
     })
-
 
 
 @router.get("/admin/orders/export")

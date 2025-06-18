@@ -77,12 +77,13 @@
 <body>
     <div class="page-container">
         <h1>Все заявки</h1>
-
+        <div class="actions">
+            <a href="/" class="button">← На главную</a>
+        </div>
         <!-- Filter Form -->
         <form method="get" action="/admin/orders" class="filter-form card">
-            <input type="date" name="order_for_date" value="{{ order_for_date or '' }}" class="p-2 border border-gray-300 rounded-md">
-            <input type="text" name="address" placeholder="Фильтр по адресу" value="{{ address or '' }}" class="p-2 border border-gray-300 rounded-md">
-            <button type="submit" class="p-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600">Фильтровать</button>
+            <input type="date" name="order_for_date" value="{{ order_for or '' }}" class="p-2 border border-gray-300 rounded-md">
+            <input type="text" name="address" placeholder="Фильтр по адресу" value="{{ address or '' }}" class="p-2 border border-gray-300 rounded-md">            <button type="submit" class="p-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600">Фильтровать</button>
         </form>
 
         <!-- Orders -->
