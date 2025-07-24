@@ -1,8 +1,10 @@
 import io
 import logging
 import uuid
-from datetime import datetime, date
+from datetime import date, datetime
+from io import BytesIO
 
+import openpyxl
 from asyncpg import Record
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
@@ -10,9 +12,6 @@ from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
 from fastapi.templating import Jinja2Templates
 from openpyxl import Workbook
 from pydantic import BaseModel
-import openpyxl
-from io import BytesIO
-
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -299,7 +298,9 @@ async def toggle_item_activity(request: Request, item_id: int = Form(...), is_ac
     return RedirectResponse("/admin/items", status_code=302)
 
 
-from datetime import datetime, date # Import date and datetime for type hints and parsing
+from datetime import (  # Import date and datetime for type hints and parsing
+    date, datetime)
+
 
 @router.get("/admin/orders", response_class=HTMLResponse)
 async def admin_orders(request: Request):

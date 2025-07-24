@@ -4,6 +4,8 @@ import uuid
 
 import aio_pika
 
+from app.views import router
+
 RABBITMQ_URL = "amqp://guest:guest@rabbitmq/"
 
 # Здесь импортируем app и router с carts для доступа к памяти, либо подключаемся к отдельному хранилищу (Redis)
@@ -25,7 +27,6 @@ async def main():
 
                     # Тут обновляем корзину в памяти (или в Redis, или БД)
                     # Для примера — обновим router.carts (нужно импортировать router)
-                    from app.views import router  # адаптируйте под ваш проект
 
                     if session_id not in router.carts:
                         router.carts[session_id] = {}
