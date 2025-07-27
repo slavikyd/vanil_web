@@ -72,6 +72,20 @@
             padding: 8px;
             font-size: 0.95em;
         }
+        
+        /* Collapsible list styles */
+        .collapsible-items-list.collapsed li:nth-child(n+4) {
+            display: none;
+        }
+        .toggle-items-button {
+            background: none;
+            border: none;
+            color: #007bff;
+            cursor: pointer;
+            padding: 5px 0;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -83,7 +97,8 @@
         <!-- Filter Form -->
         <form method="get" action="/admin/orders" class="filter-form card">
             <input type="date" name="order_for_date" value="{{ order_for or '' }}" class="p-2 border border-gray-300 rounded-md">
-            <input type="text" name="address" placeholder="Фильтр по адресу" value="{{ address or '' }}" class="p-2 border border-gray-300 rounded-md">            <button type="submit" class="p-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600">Фильтровать</button>
+            <input type="text" name="address" placeholder="Фильтр по адресу" value="{{ address or '' }}" class="p-2 border border-gray-300 rounded-md">
+            <button type="submit" class="p-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600">Фильтровать</button>
         </form>
 
         <!-- Orders -->
@@ -92,10 +107,6 @@
 
             <div class="grid">
                 {% for order_id_key, order in orders.items() %}
-                    <script>
-                        console.log("Loop Key (order_id_key): {{ order_id_key }}");
-                        console.log("Dictionary Value (order.id): {{ order.id }}");
-                    </script>
                     <div class="card">
                         <div class="meta">
                             <div><strong>Создано:</strong> {{ order.created.strftime('%Y-%m-%d %H:%M:%S') }}</div>
@@ -106,11 +117,18 @@
 
                         <h4>Содержимое:</h4>
                         {% if order['items'] %}
-                            <ul class="items-list">
+                            <ul class="collapsible-items-list {% if order['items'] | length > 3 %}collapsed{% endif %}">
                                 {% for item in order['items'] %}
                                     <li>{{ item.name }} — Кол-во: {{ item.quantity }}</li>
                                 {% endfor %}
                             </ul>
+                            
+                            {% if order['items'] | length > 3 %}
+                                <button class="toggle-items-button" 
+                                        data-target="{{ order.id | replace('-', '') }}">
+                                    Показать больше
+                                </button>
+                            {% endif %}
                         {% endif %}
 
                         <!-- Delete Form -->
@@ -143,7 +161,23 @@
     </div>
 
     <script>
-        console.log("admin_orders.html JavaScript block loaded and executing.");
+        // Collapsible list functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.toggle-items-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    // Get the list element (previous sibling of the button)
+                    const list = button.previousElementSibling;
+                    
+                    if (list.classList.contains('collapsed')) {
+                        list.classList.remove('collapsed');
+                        button.textContent = 'Показать меньше';
+                    } else {
+                        list.classList.add('collapsed');
+                        button.textContent = 'Показать больше';
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>
