@@ -347,7 +347,7 @@ async def admin_orders(request: Request):
             JOIN orders_items oi ON oi.order_id = o.id
             JOIN items i ON oi.item_id = i.id
             {where_sql}
-            ORDER BY o.order_for DESC, o.created
+            ORDER BY o.order_for ASC, o.created ASC
         """, *query_args)
 
     grouped_orders = {}
