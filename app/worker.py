@@ -8,7 +8,6 @@ from app.views import router
 
 RABBITMQ_URL = "amqp://guest:guest@rabbitmq/"
 
-# Здесь импортируем app и router с carts для доступа к памяти, либо подключаемся к отдельному хранилищу (Redis)
 
 async def main():
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
@@ -24,9 +23,6 @@ async def main():
                     session_id = data["session_id"]
                     item_id = data["item_id"]
                     quantity = data["quantity"]
-
-                    # Тут обновляем корзину в памяти (или в Redis, или БД)
-                    # Для примера — обновим router.carts (нужно импортировать router)
 
                     if session_id not in router.carts:
                         router.carts[session_id] = {}
