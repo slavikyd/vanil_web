@@ -6,145 +6,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        body {
-            padding: 0.5em;
-            background-color: #f0f2f5;
-        }
-        .page-container {
-            margin: 20px auto;
-            padding: 0 15px;
-            max-width: 1400px; /* Increased max-width for desktop */
-        }
-        .delete-button {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
-            background-color: #dc3545;
-            color: white;
-            font-size: 0.85em;
-            cursor: pointer;
-            margin-top: 10px;
-            align-self: flex-end;
-        }
-        .delete-button:hover {
-            background-color: #c82333;
-        }
-        .card {
-            padding: 20px; /* Increased padding */
-            margin-bottom: 20px; /* Increased spacing */
+        /* ... existing styles ... */
+        
+        /* Date header styling with sorting indicator */
+        .date-header {
             display: flex;
-            flex-direction: column;
             justify-content: space-between;
-            min-height: 0;
-            height: 100%; /* Ensure cards fill grid space */
-            box-sizing: border-box;
-        }
-        .card .meta div {
-            margin-bottom: 8px; /* Increased spacing */
-            font-size: 0.95em;
-        }
-        .card .meta strong {
-            display: inline-block;
-            min-width: 100px; /* More space for labels */
-        }
-        .card h4 {
-            margin-top: 15px;
-            margin-bottom: 8px;
-            font-size: 1.05em;
-        }
-        .card .items-list {
-            padding-left: 15px;
-            margin-top: 8px;
-            padding-top: 5px;
-        }
-        .card .items-list li {
-            font-size: 0.95em;
-            padding-left: 1em;
-            margin-bottom: 5px; /* Increased spacing */
-            line-height: 1.4;
-        }
-        .card-actions {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 15px;
-        }
-        .filter-form button, .export-links .button {
-            padding: 10px 20px; /* Larger buttons */
-            font-size: 1em;
-        }
-        .filter-form input[type="date"], .filter-form input[type="text"] {
-            padding: 10px; /* Larger inputs */
-            font-size: 1em;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        
-        /* Collapsible list styles */
-        .collapsible-items-list.collapsed li:nth-child(n+4) {
-            display: none;
-        }
-        .toggle-items-button {
-            background: none;
-            border: none;
-            color: #007bff;
-            cursor: pointer;
-            padding: 5px 0;
-            font-size: 0.9em;
-            margin-top: 8px;
-            text-align: left;
-        }
-        
-        /* Grid improvements */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px; /* Increased gap between cards */
-        }
-        
-        /* Date header styling */
-        h2 {
+            align-items: center;
             margin-top: 25px;
             margin-bottom: 15px;
             padding-bottom: 8px;
             border-bottom: 1px solid #e0e0e0;
         }
         
-        /* Form layout adjustments */
-        .filter-form {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 15px;
-        }
-        
-        /* Responsive adjustments */
-        @media (min-width: 768px) {
-            .page-container {
-                padding: 0 30px;
-            }
-            .filter-form {
-                grid-template-columns: 1fr 1fr auto;
-                align-items: end;
-            }
-            .filter-form button {
-                height: 42px; /* Match input height */
-            }
-        }
-        
-        /* Export links container */
-        .export-links {
+        .sort-controls {
             display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 20px;
-            margin-bottom: 20px;
+            gap: 10px;
+            align-items: center;
         }
         
-        /* Debug info styling */
-        .debug-info {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 5px;
+        .sort-button {
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.85em;
+            cursor: pointer;
+        }
+        
+        .sort-button.active {
+            background: #e0e0e0;
+            font-weight: bold;
+        }
+        
+        .date-range-filter {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        @media (max-width: 767px) {
+            .date-range-filter {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -155,22 +59,46 @@
             <a href="/" class="button">← На главную</a>
         </div>
         
-        <!-- Filter Form -->
+        <!-- Enhanced Filter Form -->
         <form method="get" action="/admin/orders" class="filter-form card">
             <div>
                 <label for="order-date">Дата заявки:</label>
-                <input type="date" id="order-date" name="order_for_date" value="{{ order_for or '' }}" class="p-2 border border-gray-300 rounded-md">
+                <input type="date" id="order-date" name="order_for_date" value="{{ request.args.get('order_for_date', '') }}" class="p-2 border border-gray-300 rounded-md">
             </div>
             <div>
                 <label for="address-filter">Фильтр по адресу:</label>
-                <input type="text" id="address-filter" name="address" placeholder="Введите адрес" value="{{ address or '' }}" class="p-2 border border-gray-300 rounded-md">
+                <input type="text" id="address-filter" name="address" placeholder="Введите адрес" value="{{ request.args.get('address', '') }}" class="p-2 border border-gray-300 rounded-md">
             </div>
             <button type="submit" class="p-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600">Фильтровать</button>
+            
+            <!-- Date Range Filter -->
+            <div class="date-range-filter">
+                <div>
+                    <label for="start-date">С:</label>
+                    <input type="date" id="start-date" name="start_date" value="{{ request.args.get('start_date', '') }}">
+                </div>
+                <div>
+                    <label for="end-date">По:</label>
+                    <input type="date" id="end-date" name="end_date" value="{{ request.args.get('end_date', '') }}">
+                </div>
+            </div>
         </form>
+
+        <!-- Sorting Controls -->
+        <div class="sort-controls card">
+            <span>Сортировать по дате:</span>
+            <button class="sort-button {% if sort_order == 'desc' %}active{% endif %}" 
+                    onclick="setSortOrder('desc')">Сначала новые</button>
+            <button class="sort-button {% if sort_order == 'asc' %}active{% endif %}" 
+                    onclick="setSortOrder('asc')">Сначала старые</button>
+        </div>
 
         <!-- Orders -->
         {% for order_for, orders in grouped_orders.items() %}
-            <h2>Дата заявки: {{ order_for.strftime('%Y-%m-%d') }}</h2>
+            <div class="date-header">
+                <h2>Дата заявки: {{ order_for.strftime('%Y-%m-%d') }}</h2>
+                <span>{{ orders|length }} заявок</span>
+            </div>
 
             <div class="grid">
                 {% for order_id_key, order in orders.items() %}
@@ -191,8 +119,7 @@
                             </ul>
                             
                             {% if order['items'] | length > 3 %}
-                                <button class="toggle-items-button" 
-                                        data-target="{{ order.id | replace('-', '') }}">
+                                <button class="toggle-items-button">
                                     Показать больше
                                 </button>
                             {% endif %}
@@ -201,7 +128,7 @@
                         <!-- Delete Form -->
                         <div class="card-actions">
                             {% if order.id %}
-                                <form id="deleteForm-{{ order.id | replace('-', '') }}" method="post" action="/admin/orders/delete"
+                                <form method="post" action="/admin/orders/delete"
                                       onsubmit="return confirm('Вы уверены, что хотите удалить эту заявку?');">
                                     <input type="hidden" name="order_id" value="{{ order.id }}">
                                     <button type="submit" class="delete-button">Удалить заявку</button>
@@ -218,6 +145,10 @@
             <div class="export-links card">
                 <a href="/admin/export/by_address?order_for={{ order_for }}" class="button">Экспорт по адресам (Excel)</a>
                 <a href="/admin/export/all_items?order_for={{ order_for }}" class="button">Экспорт всех позиций (Excel)</a>
+            </div>
+        {% else %}
+            <div class="card">
+                <p>Нет заявок для отображения</p>
             </div>
         {% endfor %}
 
@@ -245,8 +176,27 @@
                 });
             });
             
+            // Preserve scroll position after form submission
+            const scrollPos = sessionStorage.getItem('scrollPos');
+            if (scrollPos) {
+                window.scrollTo(0, parseInt(scrollPos));
+                sessionStorage.removeItem('scrollPos');
+            }
+            
             console.log("Admin orders page initialized");
         });
+        
+        // Save scroll position before filter submit
+        document.querySelector('.filter-form').addEventListener('submit', () => {
+            sessionStorage.setItem('scrollPos', window.scrollY);
+        });
+        
+        // Set sort order
+        function setSortOrder(order) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('sort', order);
+            window.location.href = url.toString();
+        }
     </script>
 </body>
 </html>
