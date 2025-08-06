@@ -136,12 +136,22 @@
         .order-items {
             margin: 15px 0;
             padding: 0;
+            list-style: none; /* Fixed: Remove default bullets */
         }
         .order-items li {
             padding: 8px 0;
             border-bottom: 1px dashed #eee;
             display: flex;
             justify-content: space-between;
+            padding-left: 0; /* Fixed: Remove left padding */
+            position: relative;
+        }
+        /* Fixed: Add custom bullet with proper spacing */
+        .order-items li::before {
+            content: "•";
+            position: absolute;
+            left: -15px;
+            color: #555;
         }
         .order-items li:last-child {
             border-bottom: none;
@@ -277,7 +287,7 @@
                 {% endfor %}
             </div>
 
-            <!-- Export links - FIXED TYPO HERE -->
+            <!-- Export links -->
             <div class="export-links">
                 <a href="/admin/export/by_address?order_for={{ order_for }}">Экспорт по адресам (Excel)</a>
                 <a href="/admin/export/all_items?order_for={{ order_for }}">Экспорт всех позиций (Excel)</a>
