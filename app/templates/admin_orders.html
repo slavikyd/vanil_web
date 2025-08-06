@@ -102,7 +102,6 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            cursor: pointer;
         }
         .order-info {
             flex: 1;
@@ -124,6 +123,7 @@
             font-size: 0.9em;
             padding: 5px 10px;
             margin-left: 10px;
+            white-space: nowrap;
         }
         .order-details {
             padding: 0 15px 15px;
@@ -235,15 +235,17 @@
 
             <div class="orders-container">
                 {% for order_id_key, order in orders.items() %}
-                    <div class="order-card">
-                        <div class="order-summary" onclick="toggleOrderDetails('{{ order.id }}')">
+                    <div class="order-card" id="order-{{ order.id }}">
+                        <div class="order-summary">
                             <div class="order-info">
                                 <div><strong>Кассир:</strong> {{ order.cashier_name }}</div>
                                 <div><strong>Адрес:</strong> {{ order.address }}</div>
                                 <div><strong>Создано:</strong> {{ order.created.strftime('%H:%M') }}</div>
                                 <div class="debug-info">ID: {{ order.id }}</div>
                             </div>
-                            <button class="order-toggle">Развернуть</button>
+                            <button class="order-toggle" data-order-id="{{ order.id }}">
+                                Развернуть
+                            </button>
                         </div>
                         
                         <div class="order-details" id="details-{{ order.id }}">
@@ -278,7 +280,7 @@
             <!-- Export links -->
             <div class="export-links">
                 <a href="/admin/export/by_address?order_for={{ order_for }}">Экспорт по адресам (Excel)</a>
-                <a href="/admin/export/all_items?order_for={{ order_for }}">Экспорт всех позиций (Excel)</a>
+                <a href="/admin/export/all_items?order_for={{ order.for }}">Экспорт всех позиций (Excel)</a>
             </div>
         {% else %}
             <div class="order-card">
@@ -297,13 +299,13 @@
     </div>
 
     <script>
-        // Toggle order details
+        // Toggle order details function
         function toggleOrderDetails(orderId) {
-            const card = document.querySelector(`#details-${orderId}`).closest('.order-card');
+            const card = document.querySelector(`#order-${orderId}`);
             const details = document.getElementById(`details-${orderId}`);
             const toggleBtn = card.querySelector('.order-toggle');
             
-            if (details.style.display === 'block') {
+            if (card.classList.contains('expanded')) {
                 details.style.display = 'none';
                 card.classList.remove('expanded');
                 toggleBtn.textContent = 'Развернуть';
@@ -311,30 +313,34 @@
                 details.style.display = 'block';
                 card.classList.add('expanded');
                 toggleBtn.textContent = 'Свернуть';
+                
+                // Scroll to the order if it's not fully visible
+                const rect = card.getBoundingClientRect();
+                if (rect.top < 100 || rect.bottom > window.innerHeight) {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
             }
         }
 
-        // Auto-expand if URL hash matches
+        // Setup event listeners
         document.addEventListener('DOMContentLoaded', () => {
-            if (window.location.hash) {
-                const orderId = window.location.hash.substring(1);
-                const details = document.getElementById(`details-${orderId}`);
-                if (details) {
-                    details.style.display = 'block';
-                    details.closest('.order-card').classList.add('expanded');
-                    details.closest('.order-card').querySelector('.order-toggle').textContent = 'Свернуть';
-                    details.scrollIntoView({ behavior: 'smooth' });
-                }
-            }
-            
             // Add event listeners to all toggle buttons
             document.querySelectorAll('.order-toggle').forEach(btn => {
-                btn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const orderId = this.closest('.order-card').querySelector('.order-details').id.split('-')[1];
+                btn.addEventListener('click', function() {
+                    const orderId = this.dataset.orderId;
                     toggleOrderDetails(orderId);
                 });
             });
+            
+            // Auto-expand if URL hash matches
+            if (window.location.hash) {
+                const orderId = window.location.hash.substring(1);
+                const card = document.getElementById(`order-${orderId}`);
+                if (card) {
+                    toggleOrderDetails(orderId);
+                    card.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
         });
     </script>
 </body>
