@@ -9,142 +9,200 @@
         body {
             padding: 0.5em;
             background-color: #f0f2f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
         }
         .page-container {
             margin: 20px auto;
             padding: 0 15px;
-            max-width: 1400px; /* Increased max-width for desktop */
+            max-width: 800px;
         }
-        .delete-button {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
-            background-color: #dc3545;
-            color: white;
-            font-size: 0.85em;
-            cursor: pointer;
-            margin-top: 10px;
-            align-self: flex-end;
+        .actions {
+            margin: 15px 0;
         }
-        .delete-button:hover {
-            background-color: #c82333;
-        }
-        .card {
-            padding: 20px; /* Increased padding */
-            margin-bottom: 20px; /* Increased spacing */
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-height: 0;
-            height: 100%; /* Ensure cards fill grid space */
-            box-sizing: border-box;
-        }
-        .card .meta div {
-            margin-bottom: 8px; /* Increased spacing */
-            font-size: 0.95em;
-        }
-        .card .meta strong {
+        .actions .button {
             display: inline-block;
-            min-width: 100px; /* More space for labels */
-        }
-        .card h4 {
-            margin-top: 15px;
-            margin-bottom: 8px;
-            font-size: 1.05em;
-        }
-        .card .items-list {
-            padding-left: 15px;
-            margin-top: 8px;
-            padding-top: 5px;
-        }
-        .card .items-list li {
-            font-size: 0.95em;
-            padding-left: 1em;
-            margin-bottom: 5px; /* Increased spacing */
-            line-height: 1.4;
-        }
-        .card-actions {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 15px;
-        }
-        .filter-form button, .export-links .button {
-            padding: 10px 20px; /* Larger buttons */
-            font-size: 1em;
-        }
-        .filter-form input[type="date"], .filter-form input[type="text"] {
-            padding: 10px; /* Larger inputs */
-            font-size: 1em;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        
-        /* Collapsible list styles */
-        .collapsible-items-list.collapsed li:nth-child(n+4) {
-            display: none;
-        }
-        .toggle-items-button {
-            background: none;
-            border: none;
-            color: #007bff;
+            padding: 8px 16px;
+            background-color: #f0f0f0;
+            color: #333;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            text-decoration: none;
+            text-align: center;
             cursor: pointer;
-            padding: 5px 0;
-            font-size: 0.9em;
-            margin-top: 8px;
-            text-align: left;
+            font-size: 1rem;
         }
-        
-        /* Grid improvements */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px; /* Increased gap between cards */
-        }
-        
-        /* Date header styling */
-        h2 {
-            margin-top: 25px;
-            margin-bottom: 15px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        
-        /* Form layout adjustments */
         .filter-form {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
             display: grid;
             grid-template-columns: 1fr;
             gap: 15px;
         }
-        
-        /* Responsive adjustments */
-        @media (min-width: 768px) {
-            .page-container {
-                padding: 0 30px;
-            }
-            .filter-form {
-                grid-template-columns: 1fr 1fr auto;
-                align-items: end;
-            }
-            .filter-form button {
-                height: 42px; /* Match input height */
-            }
+        .filter-form > div {
+            display: flex;
+            flex-direction: column;
         }
-        
-        /* Export links container */
+        .filter-form label {
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .filter-form input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+        .filter-form button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 5px;
+        }
+        .date-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 30px 0 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .date-header h2 {
+            margin: 0;
+            font-size: 1.4em;
+            color: #333;
+        }
+        .order-count {
+            background: #e0e7ff;
+            color: #4f46e5;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        .order-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: box-shadow 0.2s;
+        }
+        .order-card:hover {
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+        }
+        .order-summary {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        .order-info {
+            flex: 1;
+        }
+        .order-info div {
+            margin-bottom: 5px;
+            font-size: 0.95em;
+        }
+        .order-info strong {
+            color: #555;
+            min-width: 80px;
+            display: inline-block;
+        }
+        .order-toggle {
+            background: none;
+            border: none;
+            color: #007bff;
+            cursor: pointer;
+            font-size: 0.9em;
+            padding: 5px 10px;
+            margin-left: 10px;
+        }
+        .order-details {
+            padding: 0 15px 15px;
+            border-top: 1px solid #eee;
+            display: none;
+        }
+        .order-card.expanded .order-details {
+            display: block;
+        }
+        .order-items {
+            margin: 15px 0;
+            padding: 0;
+        }
+        .order-items li {
+            padding: 8px 0;
+            border-bottom: 1px dashed #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .order-items li:last-child {
+            border-bottom: none;
+        }
+        .item-name {
+            flex: 1;
+        }
+        .item-quantity {
+            font-weight: 600;
+            color: #333;
+        }
+        .debug-info {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 5px;
+        }
+        .delete-button {
+            padding: 6px 12px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            display: block;
+            margin-top: 15px;
+            margin-left: auto;
+        }
         .export-links {
             display: flex;
             flex-wrap: wrap;
             gap: 15px;
             justify-content: center;
-            margin-top: 20px;
-            margin-bottom: 20px;
+            margin: 25px 0;
         }
-        
-        /* Debug info styling */
-        .debug-info {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 5px;
+        .export-links a {
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: 500;
+            text-align: center;
+            flex: 1;
+            min-width: 200px;
+        }
+        @media (max-width: 600px) {
+            .export-links {
+                flex-direction: column;
+            }
+            .export-links a {
+                min-width: 100%;
+            }
+            .order-summary {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .order-toggle {
+                align-self: flex-end;
+                margin-top: 10px;
+            }
         }
     </style>
 </head>
@@ -156,68 +214,79 @@
         </div>
         
         <!-- Filter Form -->
-        <form method="get" action="/admin/orders" class="filter-form card">
+        <form method="get" action="/admin/orders" class="filter-form">
             <div>
                 <label for="order-date">Дата заявки:</label>
-                <input type="date" id="order-date" name="order_for_date" value="{{ order_for or '' }}" class="p-2 border border-gray-300 rounded-md">
+                <input type="date" id="order-date" name="order_for_date" value="{{ order_for or '' }}">
             </div>
             <div>
                 <label for="address-filter">Фильтр по адресу:</label>
-                <input type="text" id="address-filter" name="address" placeholder="Введите адрес" value="{{ address or '' }}" class="p-2 border border-gray-300 rounded-md">
+                <input type="text" id="address-filter" name="address" placeholder="Введите адрес" value="{{ address or '' }}">
             </div>
-            <button type="submit" class="p-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600">Фильтровать</button>
+            <button type="submit">Фильтровать</button>
         </form>
 
         <!-- Orders -->
         {% for order_for, orders in grouped_orders.items() %}
-            <h2>Дата заявки: {{ order_for.strftime('%Y-%m-%d') }}</h2>
+            <div class="date-header">
+                <h2>{{ order_for.strftime('%d.%m.%Y') }}</h2>
+                <span class="order-count">{{ orders|length }} заявок</span>
+            </div>
 
-            <div class="grid">
+            <div class="orders-container">
                 {% for order_id_key, order in orders.items() %}
-                    <div class="card">
-                        <div class="meta">
-                            <div><strong>Создано:</strong> {{ order.created.strftime('%Y-%m-%d %H:%M:%S') }}</div>
-                            <div><strong>Кассир:</strong> {{ order.cashier_name }}</div>
-                            <div><strong>Адрес:</strong> {{ order.address }}</div>
-                            <div class="debug-info"><strong>ID заявки:</strong> {{ order.id }}</div>
+                    <div class="order-card">
+                        <div class="order-summary" onclick="toggleOrderDetails('{{ order.id }}')">
+                            <div class="order-info">
+                                <div><strong>Кассир:</strong> {{ order.cashier_name }}</div>
+                                <div><strong>Адрес:</strong> {{ order.address }}</div>
+                                <div><strong>Создано:</strong> {{ order.created.strftime('%H:%M') }}</div>
+                                <div class="debug-info">ID: {{ order.id }}</div>
+                            </div>
+                            <button class="order-toggle">Развернуть</button>
                         </div>
-
-                        <h4>Содержимое:</h4>
-                        {% if order['items'] %}
-                            <ul class="collapsible-items-list {% if order['items'] | length > 3 %}collapsed{% endif %}">
-                                {% for item in order['items'] %}
-                                    <li>{{ item.name }} — Кол-во: {{ item.quantity }}</li>
-                                {% endfor %}
-                            </ul>
+                        
+                        <div class="order-details" id="details-{{ order.id }}">
+                            <h4>Содержимое заявки:</h4>
+                            {% if order['items'] %}
+                                <ul class="order-items">
+                                    {% for item in order['items'] %}
+                                        <li>
+                                            <span class="item-name">{{ item.name }}</span>
+                                            <span class="item-quantity">{{ item.quantity }} шт.</span>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
                             
-                            {% if order['items'] | length > 3 %}
-                                <button class="toggle-items-button" 
-                                        data-target="{{ order.id | replace('-', '') }}">
-                                    Показать больше
-                                </button>
-                            {% endif %}
-                        {% endif %}
-
-                        <!-- Delete Form -->
-                        <div class="card-actions">
-                            {% if order.id %}
-                                <form id="deleteForm-{{ order.id | replace('-', '') }}" method="post" action="/admin/orders/delete"
-                                      onsubmit="return confirm('Вы уверены, что хотите удалить эту заявку?');">
-                                    <input type="hidden" name="order_id" value="{{ order.id }}">
-                                    <button type="submit" class="delete-button">Удалить заявку</button>
-                                </form>
-                            {% else %}
-                                <p style="color: red; font-size: 0.9em;">⚠️ Невозможно удалить заявку: отсутствует ID</p>
-                            {% endif %}
+                            <div class="card-actions">
+                                {% if order.id %}
+                                    <form method="post" action="/admin/orders/delete"
+                                          onsubmit="return confirm('Вы уверены, что хотите удалить эту заявку?');">
+                                        <input type="hidden" name="order_id" value="{{ order.id }}">
+                                        <button type="submit" class="delete-button">Удалить заявку</button>
+                                    </form>
+                                {% else %}
+                                    <p style="color: red; font-size: 0.9em;">⚠️ Невозможно удалить заявку: отсутствует ID</p>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                 {% endfor %}
             </div>
 
             <!-- Export links -->
-            <div class="export-links card">
-                <a href="/admin/export/by_address?order_for={{ order_for }}" class="button">Экспорт по адресам (Excel)</a>
-                <a href="/admin/export/all_items?order_for={{ order_for }}" class="button">Экспорт всех позиций (Excel)</a>
+            <div class="export-links">
+                <a href="/admin/export/by_address?order_for={{ order_for }}">Экспорт по адресам (Excel)</a>
+                <a href="/admin/export/all_items?order_for={{ order_for }}">Экспорт всех позиций (Excel)</a>
+            </div>
+        {% else %}
+            <div class="order-card">
+                <div class="order-summary">
+                    <div class="order-info">
+                        <div>Нет заявок для отображения</div>
+                    </div>
+                </div>
             </div>
         {% endfor %}
 
@@ -228,24 +297,44 @@
     </div>
 
     <script>
-        // Collapsible list functionality
+        // Toggle order details
+        function toggleOrderDetails(orderId) {
+            const card = document.querySelector(`#details-${orderId}`).closest('.order-card');
+            const details = document.getElementById(`details-${orderId}`);
+            const toggleBtn = card.querySelector('.order-toggle');
+            
+            if (details.style.display === 'block') {
+                details.style.display = 'none';
+                card.classList.remove('expanded');
+                toggleBtn.textContent = 'Развернуть';
+            } else {
+                details.style.display = 'block';
+                card.classList.add('expanded');
+                toggleBtn.textContent = 'Свернуть';
+            }
+        }
+
+        // Auto-expand if URL hash matches
         document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.toggle-items-button').forEach(button => {
-                button.addEventListener('click', () => {
-                    // Get the list element (previous sibling of the button)
-                    const list = button.previousElementSibling;
-                    
-                    if (list.classList.contains('collapsed')) {
-                        list.classList.remove('collapsed');
-                        button.textContent = 'Показать меньше';
-                    } else {
-                        list.classList.add('collapsed');
-                        button.textContent = 'Показать больше';
-                    }
+            if (window.location.hash) {
+                const orderId = window.location.hash.substring(1);
+                const details = document.getElementById(`details-${orderId}`);
+                if (details) {
+                    details.style.display = 'block';
+                    details.closest('.order-card').classList.add('expanded');
+                    details.closest('.order-card').querySelector('.order-toggle').textContent = 'Свернуть';
+                    details.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+            
+            // Add event listeners to all toggle buttons
+            document.querySelectorAll('.order-toggle').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const orderId = this.closest('.order-card').querySelector('.order-details').id.split('-')[1];
+                    toggleOrderDetails(orderId);
                 });
             });
-            
-            console.log("Admin orders page initialized");
         });
     </script>
 </body>
