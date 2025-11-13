@@ -37,12 +37,10 @@ erDiagram
         UUID order_id FK
         UUID item_id FK
         int quantity
-        PK (order_id, item_id)
     }
     shops_orders {
         text shop_id FK
         UUID order_id FK
-        PK (shop_id, order_id)
     }
     
     shops ||--o{ orders : ""
@@ -54,4 +52,5 @@ erDiagram
     shops_orders }o--|| shops : ""
     items ||--o{ warehouse : ""
     items ||--o{ orders_items : ""
+
 ```
