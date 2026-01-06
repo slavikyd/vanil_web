@@ -1,220 +1,220 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Создание заявки</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="/static/style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-</head>
-<body style="font-family: Arial, Helvetica, sans-serif">
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-
-    const userId = tg.initDataUnsafe?.user?.id;
-    if (userId) {
-      window.addEventListener('DOMContentLoaded', () => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'tg_id';
-        input.value = userId;
-        document.querySelectorAll('form').forEach(form => {
-          if (!form.querySelector('input[name="tg_id"]')) {
-            form.appendChild(input.cloneNode());
-          }
-        });
-      });
-    }
-  </script>
-
-  {% if not cashier_id %}
-    <h2 style="text-align:center;">Введите ID кассира для входа</h2>
-    {% if error %}<p style="color:red; text-align:center;">{{ error }}</p>{% endif %}
-    <form action="/login" method="post" style="text-align:center; margin-top:2em;">
-      <input type="text" name="cashier_id" placeholder="Cashier ID" required>
-      <button type="submit">Войти</button>
-    </form>
-  {% else %}
-    <h1 style="text-align:center;">Заказ:</h1>
-
-    <div class="page-container">
-      <div class="grid">
-        {% for item in items %}
-          <div class="card" style="display:flex; align-items:center; justify-content:space-between; padding:5px; border:1px solid #eee; border-radius:4px; margin-bottom:7.5px;">
-            <strong>{{ item.name }}</strong>
-            <div class="quantity-selector" style="display:flex; align-items:center;">
-              <button type="button" class="quantity-minus" data-item-id="{{ item.id }}">‑</button>
-              <input type="number" id="quantity-{{ item.id }}" name="quantity" data-item-id="{{ item.id }}"
-                     value="{{ cart.get(item.id|string, 0) }}" min="0" style="width:50px; text-align:center;">
-              <button type="button" class="quantity-plus" data-item-id="{{ item.id }}">+</button>
-            </div>
-          </div>
-        {% endfor %}
-      </div>
-
-      <ul class="items-list" style="padding-left:0;"></ul>
-    </div>
-
-    <hr>
-
-    <form id="orderForm" action="/place_order" method="post" style="text-align:center; margin-top:2em;">
-      <label for="order_for">Delivery Date:</label><br>
-      <input type="date" id="order_for" name="order_for" required>
-<script>
-  const dateInput = document.getElementById('order_for');
-  const dateError = document.getElementById('dateError');
-
-  const now = new Date();
-  const minDate = new Date();
-  const maxDate = new Date();
-  maxDate.setDate(now.getDate() + 7);
-
-  const toInputStr = d => d.toISOString().split('T')[0];
-  dateInput.min = toInputStr(minDate);
-  dateInput.max = toInputStr(maxDate);
-
-  dateInput.addEventListener('input', () => {
-    const val = dateInput.value;
-    if (val < dateInput.min || val > dateInput.max) {
-      dateError.textContent = `Дата должна быть от ${dateInput.min} до ${dateInput.max}`;
-    } else {
-      dateError.textContent = '';
-    }
-  });
-</script>
-<div id="dateError" style="color:red;"></div>
-
-      <div id="dateError" style="color:red; margin-top:0.5em;"></div><br>
-      <button type="submit">Создать заявку</button>
-    </form>
-
-    <div style="display:flex; justify-content:space-between; margin-top:1em;">
-      <a href="/orders">Посмотреть заявки</a>
-      <form action="/logout" method="post"><button type="submit">Выйти</button></form>
-    </div>
-
-    {% if is_admin %}
-      <div style="margin-top:3em; text-align:center;">
-        <a href="/admin/orders">Админ: Все заявки</a> |
-        <a href="/admin/items">Админ: Товары</a>
-      </div>
-    {% endif %}
-
+  <!DOCTYPE html>
+  <html lang="ru">
+  <head>
+    <meta charset="UTF-8">
+    <title>Создание заявки</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+  </head>
+  <body style="font-family: Arial, Helvetica, sans-serif">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        const selectors = document.querySelectorAll('.quantity-selector');
-        const orderList = document.querySelector('.items-list');
-        const clearBtn = document.getElementById('clear-cart-btn');
+      const tg = window.Telegram.WebApp;
+      tg.ready();
 
-        async function sendUpdate(itemId, qty) {
-          const tgId = document.querySelector('input[name="tg_id"]')?.value || '';
-          const resp = await fetch('/add-to-order', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({item_id:itemId, quantity: qty, tg_id: tgId})
+      const userId = tg.initDataUnsafe?.user?.id;
+      if (userId) {
+        window.addEventListener('DOMContentLoaded', () => {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'tg_id';
+          input.value = userId;
+          document.querySelectorAll('form').forEach(form => {
+            if (!form.querySelector('input[name="tg_id"]')) {
+              form.appendChild(input.cloneNode());
+            }
           });
-          if (resp.ok) {
-            const json = await resp.json();
-            renderOrder(json.cart, json.items_data);
-          }
-        }
+        });
+      }
+    </script>
 
-        async function clearCart() {
-          const tgId = document.querySelector('input[name="tg_id"]')?.value || '';
-          const resp = await fetch('/clear-cart', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({tg_id:tgId})
-          });
-          if (resp.ok) {
-            const j = await resp.json();
-            selectors.forEach(s => s.querySelector('input').value = 0);
-            renderOrder(j.cart, j.items_data);
-          }
-        }
+    {% if not cashier_id %}
+      <h2 style="text-align:center;">Введите ID кассира для входа</h2>
+      {% if error %}<p style="color:red; text-align:center;">{{ error }}</p>{% endif %}
+      <form action="/login" method="post" style="text-align:center; margin-top:2em;">
+        <input type="text" name="cashier_id" placeholder="Cashier ID" required>
+        <button type="submit">Войти</button>
+      </form>
+    {% else %}
+      <h1 style="text-align:center;">Заказ:</h1>
 
-        function renderOrder(cart, items) {
-          orderList.innerHTML = '';
-          let has = false;
-          for (const id in cart) {
-            if (cart[id] > 0) {
-              has = true;
-              const item = items.find(i => String(i.id) === id);
-              if (item) {
-                const li = document.createElement('li');
-                li.style = 'display:flex;justify-content:space-between;margin-bottom:5px;';
-                li.innerHTML = `<span>${item.name} — Количество: ${cart[id]}</span>
-                                <button data-item-id="${id}" style="color:#fff;background:#d9534f;">Удалить</button>`;
-                li.querySelector('button').onclick = e => {
-                  e.preventDefault();
-                  sendUpdate(id, 0);
-                  document.getElementById(`quantity-${id}`).value = 0;
-                };
-                orderList.appendChild(li);
-              }
+      <div class="page-container">
+        <div class="grid">
+          {% for item in items %}
+            <div class="card" style="display:flex; align-items:center; justify-content:space-between; padding:5px; border:1px solid #eee; border-radius:4px; margin-bottom:7.5px;">
+              <strong>{{ item.name }}</strong>
+              <div class="quantity-selector" style="display:flex; align-items:center;">
+                <button type="button" class="quantity-minus" data-item-id="{{ item.id }}">‑</button>
+                <input type="number" id="quantity-{{ item.id }}" name="quantity" data-item-id="{{ item.id }}"
+                      value="{{ cart.get(item.id|string, 0) }}" min="0" style="width:50px; text-align:center;">
+                <button type="button" class="quantity-plus" data-item-id="{{ item.id }}">+</button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+
+        <ul class="items-list" style="padding-left:0;"></ul>
+      </div>
+
+      <hr>
+
+      <form id="orderForm" action="/place_order" method="post" style="text-align:center; margin-top:2em;">
+        <label for="order_for">Delivery Date:</label><br>
+        <input type="date" id="order_for" name="order_for" required>
+  <script>
+    const dateInput = document.getElementById('order_for');
+    const dateError = document.getElementById('dateError');
+
+    const now = new Date();
+    const minDate = new Date();
+    const maxDate = new Date();
+    maxDate.setDate(now.getDate() + 7);
+
+    const toInputStr = d => d.toISOString().split('T')[0];
+    dateInput.min = toInputStr(minDate);
+    dateInput.max = toInputStr(maxDate);
+
+    dateInput.addEventListener('input', () => {
+      const val = dateInput.value;
+      if (val < dateInput.min || val > dateInput.max) {
+        dateError.textContent = `Дата должна быть от ${dateInput.min} до ${dateInput.max}`;
+      } else {
+        dateError.textContent = '';
+      }
+    });
+  </script>
+  <div id="dateError" style="color:red;"></div>
+
+        <div id="dateError" style="color:red; margin-top:0.5em;"></div><br>
+        <button type="submit">Создать заявку</button>
+      </form>
+
+      <div style="display:flex; justify-content:space-between; margin-top:1em;">
+        <a href="/orders">Посмотреть заявки</a>
+        <form action="/logout" method="post"><button type="submit">Выйти</button></form>
+      </div>
+
+      {% if is_admin %}
+        <div style="margin-top:3em; text-align:center;">
+          <a href="/admin/orders">Админ: Все заявки</a> |
+          <a href="/admin/items">Админ: Товары</a>
+        </div>
+      {% endif %}
+
+      <script>
+        document.addEventListener('DOMContentLoaded', () => {
+          const selectors = document.querySelectorAll('.quantity-selector');
+          const orderList = document.querySelector('.items-list');
+          const clearBtn = document.getElementById('clear-cart-btn');
+
+          async function sendUpdate(itemId, qty) {
+            const tgId = document.querySelector('input[name="tg_id"]')?.value || '';
+            const resp = await fetch('/add-to-order', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({item_id:itemId, quantity: qty, tg_id: tgId})
+            });
+            if (resp.ok) {
+              const json = await resp.json();
+              renderOrder(json.cart, json.items_data);
             }
           }
-          if (!has) orderList.textContent = 'Ваша корзина пуста.';
-        }
 
-        selectors.forEach(s => {
-          const inp = s.querySelector('input');
-          const id = inp.dataset.itemId;
-          s.querySelector('.quantity-plus').onclick = () => { inp.stepUp(); sendUpdate(id, +inp.value); };
-          s.querySelector('.quantity-minus').onclick = () => { inp.stepDown(); sendUpdate(id, +inp.value); };
-          inp.onchange = () => sendUpdate(id, +inp.value);
-        });
+          async function clearCart() {
+            const tgId = document.querySelector('input[name="tg_id"]')?.value || '';
+            const resp = await fetch('/clear-cart', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({tg_id:tgId})
+            });
+            if (resp.ok) {
+              const j = await resp.json();
+              selectors.forEach(s => s.querySelector('input').value = 0);
+              renderOrder(j.cart, j.items_data);
+            }
+          }
 
-        clearBtn.onclick = clearCart;
+          function renderOrder(cart, items) {
+            orderList.innerHTML = '';
+            let has = false;
+            for (const id in cart) {
+              if (cart[id] > 0) {
+                has = true;
+                const item = items.find(i => String(i.id) === id);
+                if (item) {
+                  const li = document.createElement('li');
+                  li.style = 'display:flex;justify-content:space-between;margin-bottom:5px;';
+                  li.innerHTML = `<span>${item.name} — Количество: ${cart[id]}</span>
+                                  <button data-item-id="${id}" style="color:#fff;background:#d9534f;">Удалить</button>`;
+                  li.querySelector('button').onclick = e => {
+                    e.preventDefault();
+                    sendUpdate(id, 0);
+                    document.getElementById(`quantity-${id}`).value = 0;
+                  };
+                  orderList.appendChild(li);
+                }
+              }
+            }
+            if (!has) orderList.textContent = 'Ваша корзина пуста.';
+          }
 
-        renderOrder(JSON.parse('{{ cart | tojson }}'), JSON.parse('{{ items | tojson }}'));
+          selectors.forEach(s => {
+            const inp = s.querySelector('input');
+            const id = inp.dataset.itemId;
+            s.querySelector('.quantity-plus').onclick = () => { inp.stepUp(); sendUpdate(id, +inp.value); };
+            s.querySelector('.quantity-minus').onclick = () => { inp.stepDown(); sendUpdate(id, +inp.value); };
+            inp.onchange = () => sendUpdate(id, +inp.value);
+          });
 
-        // Date restrictions
-        const dateInput = document.getElementById('order_for');
-        const dateError = document.getElementById('dateError');
+          clearBtn.onclick = clearCart;
 
-        const now = new Date();
-        const getDateStr = d => d.toISOString().split('T')[0];
-        const min = getDateStr(new Date());
-        now.setDate(now.getDate() + 7);
-        const max = getDateStr(now);
-        dateInput.min = min;
-        dateInput.max = max;
+          renderOrder(JSON.parse('{{ cart | tojson }}'), JSON.parse('{{ items | tojson }}'));
 
-        function validateDate() {
-          const v = dateInput.value;
-          if (!v) {
+          // Date restrictions
+          const dateInput = document.getElementById('order_for');
+          const dateError = document.getElementById('dateError');
+
+          const now = new Date();
+          const getDateStr = d => d.toISOString().split('T')[0];
+          const min = getDateStr(new Date());
+          now.setDate(now.getDate() + 7);
+          const max = getDateStr(now);
+          dateInput.min = min;
+          dateInput.max = max;
+
+          function validateDate() {
+            const v = dateInput.value;
+            if (!v) {
+              dateError.textContent = '';
+              return false;
+            }
+            if (v < dateInput.min || v > dateInput.max) {
+              dateError.textContent = `Выберите между ${dateInput.min} и ${dateInput.max}.`;
+              return false;
+            }
             dateError.textContent = '';
-            return false;
+            return true;
           }
-          if (v < dateInput.min || v > dateInput.max) {
-            dateError.textContent = `Выберите между ${dateInput.min} и ${dateInput.max}.`;
-            return false;
-          }
-          dateError.textContent = '';
-          return true;
-        }
 
-        dateInput.oninput = validateDate;
+          dateInput.oninput = validateDate;
 
-        document.getElementById('orderForm').onsubmit = async e => {
-          e.preventDefault();
-          if (!validateDate()) return;
-          const fd = new FormData(e.target);
-          if (!fd.has('tg_id') && document.querySelector('input[name="tg_id"]')) {
-            fd.append('tg_id', document.querySelector('input[name="tg_id"]').value);
-          }
-          const resp = await fetch('/place_order', { method: 'POST', body: fd });
-          if (resp.ok) {
-            window.location.reload(); // ✅ Reload after order creation
-          } else {
-            alert('Ошибка при создании заявки.');
-          }
-        };
-      });
-    </script>
-  {% endif %}
-</body>
-</html>
+          document.getElementById('orderForm').onsubmit = async e => {
+            e.preventDefault();
+            if (!validateDate()) return;
+            const fd = new FormData(e.target);
+            if (!fd.has('tg_id') && document.querySelector('input[name="tg_id"]')) {
+              fd.append('tg_id', document.querySelector('input[name="tg_id"]').value);
+            }
+            const resp = await fetch('/place_order', { method: 'POST', body: fd });
+            if (resp.ok) {
+              window.location.reload(); // ✅ Reload after order creation
+            } else {
+              alert('Ошибка при создании заявки.');
+            }
+          };
+        });
+      </script>
+    {% endif %}
+  </body>
+  </html>

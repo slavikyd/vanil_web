@@ -1,4 +1,7 @@
 services:
+  redis:
+    image: redis
+
   db:
     image: postgres:17
     environment:
@@ -32,6 +35,21 @@ services:
     env_file:
       - .env
 
+  # frontend:
+  #   image: node:20-alpine
+  #   working_dir: /app
+  #   command: npm run dev
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     - web
+  #   environment:
+  #     - VITE_API_URL=http://web:8000
+
+
   nginx:
     image: nginx:alpine
     container_name: nginx_ssl_proxy
@@ -43,6 +61,7 @@ services:
       - /etc/letsencrypt:/etc/nginx/certs:ro
     depends_on:
       - web
+      # - frontend
 
   migrate:
     build:
