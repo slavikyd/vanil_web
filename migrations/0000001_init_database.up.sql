@@ -32,11 +32,6 @@ create table cashiers (
     is_admin bool default False
 );
 
-create table cashiers_credentials (
-    cashier_id text REFERENCES cashiers (id),
-    login text,
-    password text
-);
 
 create table orders (
     id uuid primary key default uuid_generate_v4(),
