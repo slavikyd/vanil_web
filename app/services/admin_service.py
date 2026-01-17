@@ -1,13 +1,14 @@
 import io
-import uuid
 import logging
+import uuid
 from collections import defaultdict
 from datetime import date, datetime
 from io import BytesIO
+from uuid import UUID
 
 import openpyxl
 from openpyxl import Workbook
-from uuid import UUID
+
 
 class AdminService:
 
@@ -32,9 +33,7 @@ class AdminService:
     @staticmethod
     async def list_items(db):
         async with db.acquire() as conn:
-            return await conn.fetch(
-                'SELECT id, name, active FROM items ORDER BY name'
-            )
+            return await conn.fetch('SELECT id, name, active FROM items ORDER BY name')
 
     @staticmethod
     async def toggle_items(db, active_map: dict):
@@ -45,7 +44,6 @@ class AdminService:
                     is_active,
                     item_id,
                 )
-
 
     @staticmethod
     async def get_orders(db, order_for: str | None, address: str | None):
@@ -103,9 +101,7 @@ class AdminService:
                     'cashier_name': r['cashier_name'],
                     'items': [],
                 },
-            )['items'].append(
-                {'name': r['item_name'], 'quantity': r['quantity']}
-            )
+            )['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
 
         return grouped
 
@@ -122,7 +118,6 @@ class AdminService:
                     order_id,
                 )
         return 'DELETE' in result
-
 
     @staticmethod
     async def export_orders(db, address: str | None):
@@ -227,11 +222,10 @@ class AdminService:
         return output
 
 
-
-
 def parse_toggle_form(self, form):
     """Парсит active_ чекбоксы"""
     return [UUID(k[7:]) for k in form.keys() if k.startswith("active_")]
+
 
 async def toggle_items_form(self, db, form):
     """Toggle из формы"""
