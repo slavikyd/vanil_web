@@ -20,9 +20,7 @@ async def connect_db():
         database=os.getenv("DB_NAME"),
         host=os.getenv("DB_HOST"),
         port=int(os.getenv("DB_PORT", 5432)),
-        server_settings={
-            "search_path": DB_SCHEMA
-        },
+        server_settings={"search_path": DB_SCHEMA},
     )
 
 
@@ -61,8 +59,7 @@ async def load_all_orders_with_items(conn: asyncpg.Connection) -> list:
             {
                 "id": order["order_id"],
                 "created": order["created"],
-                "cashier": order["cashier_name"]
-                or f"ID {order['cashier_id']}",
+                "cashier": order["cashier_name"] or f"ID {order['cashier_id']}",
                 "address": order["address"],
                 "shop": order["shop_id"],
                 "items": [dict(item) for item in items],

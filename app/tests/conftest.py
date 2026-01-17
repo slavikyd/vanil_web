@@ -1,7 +1,7 @@
 import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
@@ -15,6 +15,7 @@ os.environ.setdefault("DB_SCHEMA", "test")
 def event_loop():
     """Dedicated event loop for async tests."""
     import asyncio
+
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
@@ -74,7 +75,7 @@ async def client(mock_db_pool, mock_redis, monkeypatch):
 
     # Patch redis at the source before any modules import it
     monkeypatch.setattr("app.redis.redis", mock_redis)
-    
+
     # Also patch in modules that imported it
     monkeypatch.setattr("app.services.cart_service.redis", mock_redis)
     monkeypatch.setattr("app.routes.crud_routes.redis", mock_redis)
@@ -88,4 +89,3 @@ async def client(mock_db_pool, mock_redis, monkeypatch):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 yield ac
-

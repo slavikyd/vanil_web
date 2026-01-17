@@ -1,15 +1,16 @@
+import logging
 import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
-from app.redis import redis
 
 from app.db import connect_db
-from app.routes import admin_routes, crud_routes, extra_routes
 from app.logging import setup_logging
-import logging
+from app.redis import redis
+from app.routes import admin_routes, crud_routes, extra_routes
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,8 +32,6 @@ app.add_middleware(
 )
 
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY"))
-
-
 
 
 @app.on_event("startup")
@@ -60,10 +59,17 @@ async def shutdown():
 
 
 # Include all route modules
-app.include_router(extra_routes.router)      # Auth & main routes (GET /, POST /login, POST /logout)
-app.include_router(crud_routes.router)       # CRUD operations (POST /add-to-order, POST /place_order, GET /orders)
-app.include_router(admin_routes.router)      # Admin operations (GET /admin/*, POST /admin/*)
+app.include_router(
+    extra_routes.router
+)  # Auth & main routes (GET /, POST /login, POST /logout)
+app.include_router(
+    crud_routes.router
+)  # CRUD operations (POST /add-to-order, POST /place_order, GET /orders)
+app.include_router(
+    admin_routes.router
+)  # Admin operations (GET /admin/*, POST /admin/*)
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
