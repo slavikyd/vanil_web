@@ -14,11 +14,10 @@ from datetime import date, datetime
 from io import BytesIO
 
 import openpyxl
+from app.settings.config import templates
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from openpyxl import Workbook
-
-from app.settings.config import templates
 
 router = APIRouter(prefix='/admin', tags=['admin'])
 
