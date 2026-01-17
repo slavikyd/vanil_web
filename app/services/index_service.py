@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from fastapi import Request
 
-from app.services.cart_service import get_or_create_session_id, get_cart
+from app.services.cart_service import get_cart, get_or_create_session_id
 from app.services.public_service import list_active_items
 
 

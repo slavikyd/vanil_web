@@ -1,6 +1,7 @@
 """
 Extra routes for authentication and main page.
 """
+
 import uuid
 
 from fastapi import APIRouter, Form, Request

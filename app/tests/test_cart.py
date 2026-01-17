@@ -1,6 +1,7 @@
 """
 Test cart operations with mocked DB and Redis.
 """
+
 from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID
 
 
@@ -16,7 +17,9 @@ async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
     # get_cart() после set_item()
     mock_redis.hgetall.return_value = {str(ITEM_ID): "2"}
 
-    resp_login = await client.post("/login", data={"cashier_id": ADMIN_ID}, follow_redirects=False)
+    resp_login = await client.post(
+        "/login", data={"cashier_id": ADMIN_ID}, follow_redirects=False
+    )
     assert resp_login.status_code == 302
 
     response = await client.post(
@@ -51,12 +54,11 @@ async def test_add_item_to_cart_no_session(client, mock_db_pool, mock_redis):
 
 async def test_remove_from_cart(client, mock_redis):
     response = await client.post(
-    "/remove-from-cart",
-    data={"itemid": str(ITEM_ID)},  # было item_id
-    follow_redirects=False,
+        "/remove-from-cart",
+        data={"itemid": str(ITEM_ID)},  # было item_id
+        follow_redirects=False,
     )
     assert response.status_code == 302
-
 
 
 async def test_place_order_empty_cart(client, mock_db_pool, mock_redis):

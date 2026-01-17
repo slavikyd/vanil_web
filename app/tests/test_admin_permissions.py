@@ -4,7 +4,6 @@ from app.tests.fixtures.constants import ADMIN_ID
 async def test_admin_access_allowed(client, mock_db_pool):
     pool, conn = mock_db_pool
 
-
     conn.fetchrow.side_effect = [
         {"id": ADMIN_ID},
         {"is_admin": True},

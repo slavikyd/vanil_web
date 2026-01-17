@@ -14,7 +14,9 @@ async def test_place_order_success(client, mock_db_pool, mock_redis):
     mock_redis.hgetall.return_value = {str(ITEM_ID): "2"}
     mock_redis.delete.return_value = None
 
-    resp_login = await client.post("/login", data={"cashier_id": ADMIN_ID}, follow_redirects=False)
+    resp_login = await client.post(
+        "/login", data={"cashier_id": ADMIN_ID}, follow_redirects=False
+    )
     assert resp_login.status_code == 302
 
     response = await client.post(
