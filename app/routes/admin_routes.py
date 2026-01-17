@@ -14,26 +14,36 @@ from datetime import date, datetime
 from io import BytesIO
 
 import openpyxl
-from app.settings.config import templates
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from openpyxl import Workbook
+
+from app.settings.config import templates
 
 router = APIRouter(prefix='/admin', tags=['admin'])
 
 
 @router.post('/items/create')
-async def create_item(request: Request, name: str = Form(...), price: float = Form(...), ttl: int = Form(...)):
+async def create_item(
+    request: Request,
+    name: str = Form(...),
+    price: float = Form(...),
+    ttl: int = Form(...),
+):
     """Create a new item. Requires admin privileges."""
     cashier_id = request.session.get('cashier_id')
     async with request.app.state.db.acquire() as conn:
-        cashier = await conn.fetchrow('SELECT is_admin FROM cashiers WHERE id = $1', cashier_id)
+        cashier = await conn.fetchrow(
+            'SELECT is_admin FROM cashiers WHERE id = $1', cashier_id
+        )
         if not cashier or not cashier['is_admin']:
             return RedirectResponse('/', status_code=302)
 
         await conn.execute(
             'INSERT INTO items (name, price, ttl, active) VALUES ($1, $2, $3, TRUE)',
-            name, price, ttl
+            name,
+            price,
+            ttl,
         )
 
     return RedirectResponse('/admin/items', status_code=302)
@@ -44,7 +54,9 @@ async def delete_item(request: Request, item_id: str = Form(...)):
     """Delete an item by ID. Requires admin privileges."""
     cashier_id = request.session.get('cashier_id')
     async with request.app.state.db.acquire() as conn:
-        cashier = await conn.fetchrow('SELECT is_admin FROM cashiers WHERE id = $1', cashier_id)
+        cashier = await conn.fetchrow(
+            'SELECT is_admin FROM cashiers WHERE id = $1', cashier_id
+        )
         if not cashier or not cashier['is_admin']:
             return RedirectResponse('/', status_code=302)
 
@@ -61,13 +73,17 @@ async def admin_items(request: Request):
         return RedirectResponse('/', status_code=302)
 
     async with request.app.state.db.acquire() as conn:
-        cashier = await conn.fetchrow('SELECT is_admin FROM cashiers WHERE id = $1', cashier_id)
+        cashier = await conn.fetchrow(
+            'SELECT is_admin FROM cashiers WHERE id = $1', cashier_id
+        )
         if not cashier or not cashier['is_admin']:
             return RedirectResponse('/', status_code=302)
 
         items = await conn.fetch('SELECT id, name, active FROM items ORDER BY name')
 
-    return templates.TemplateResponse('admin_items.html', {'request': request, 'items': items})
+    return templates.TemplateResponse(
+        'admin_items.html', {'request': request, 'items': items}
+    )
 
 
 @router.post('/items/toggle')
@@ -75,31 +91,30 @@ async def toggle_item_activity(request: Request):
     """Toggle multiple item active statuses. Requires admin privileges."""
     cashier_id = request.session.get('cashier_id')
     db = request.app.state.db
-    
+
     async with db.acquire() as conn:
-        cashier = await conn.fetchrow('SELECT is_admin FROM cashiers WHERE id = $1', cashier_id)
+        cashier = await conn.fetchrow(
+            'SELECT is_admin FROM cashiers WHERE id = $1', cashier_id
+        )
         if not cashier or not cashier['is_admin']:
             return RedirectResponse('/', status_code=302)
 
         # Get all form data
         form_data = await request.form()
-        
+
         # Get all items first to know which ones should be active
         items = await conn.fetch('SELECT id FROM items ORDER BY id')
-        
+
         for item in items:
             item_id = item['id']
             # Check if checkbox was submitted (True) or not (False)
             is_active = f'active_{item_id}' in form_data
-            
+
             await conn.execute(
-                'UPDATE items SET active = $1 WHERE id = $2',
-                is_active,
-                item_id
+                'UPDATE items SET active = $1 WHERE id = $2', is_active, item_id
             )
 
     return RedirectResponse('/admin/items', status_code=302)
-
 
 
 @router.get('/orders', response_class=HTMLResponse)
@@ -113,7 +128,9 @@ async def admin_orders(request: Request):
 
     # Check admin status
     async with db.acquire() as conn:
-        cashier = await conn.fetchrow('SELECT is_admin FROM cashiers WHERE id = $1', cashier_id)
+        cashier = await conn.fetchrow(
+            'SELECT is_admin FROM cashiers WHERE id = $1', cashier_id
+        )
         if not cashier or not cashier['is_admin']:
             return RedirectResponse('/', status_code=302)
 
@@ -143,7 +160,8 @@ async def admin_orders(request: Request):
         where_sql = ' WHERE ' + ' AND '.join(where_clauses)
 
     async with db.acquire() as conn:
-        rows = await conn.fetch(f"""
+        rows = await conn.fetch(
+            f"""
             SELECT
                 o.id AS order_id,
                 o.order_for,
@@ -158,7 +176,9 @@ async def admin_orders(request: Request):
             JOIN items i ON oi.item_id = i.id
             {where_sql}
             ORDER BY o.order_for ASC, o.created ASC
-        """, *query_args)
+        """,
+            *query_args,
+        )
 
     grouped_orders = {}
     for row in rows:
@@ -174,17 +194,22 @@ async def admin_orders(request: Request):
                 'cashier_name': row['cashier_name'],
                 'items': [],
             }
-        grouped_orders[date_key][o_id]['items'].append({
-            'name': row['item_name'],
-            'quantity': row['quantity'],
-        })
+        grouped_orders[date_key][o_id]['items'].append(
+            {
+                'name': row['item_name'],
+                'quantity': row['quantity'],
+            }
+        )
 
-    return templates.TemplateResponse('admin_orders.html', {
-        'request': request,
-        'grouped_orders': grouped_orders,
-        'order_for': order_for_date_str,
-        'address': address_filter
-    })
+    return templates.TemplateResponse(
+        'admin_orders.html',
+        {
+            'request': request,
+            'grouped_orders': grouped_orders,
+            'order_for': order_for_date_str,
+            'address': address_filter,
+        },
+    )
 
 
 @router.get('/orders/export')
@@ -221,38 +246,55 @@ async def export_orders(address: str = None, request: Request = None):
             # Create or reuse sheet
             if sheet_name not in sheet_map:
                 ws = wb.create_sheet(title=sheet_name)
-                ws.append(['Order ID', 'Created', 'Address', 'Cashier', 'Item Name', 'Quantity', 'Price'])
+                ws.append(
+                    [
+                        'Order ID',
+                        'Created',
+                        'Address',
+                        'Cashier',
+                        'Item Name',
+                        'Quantity',
+                        'Price',
+                    ]
+                )
                 sheet_map[sheet_name] = ws
             else:
                 ws = sheet_map[sheet_name]
 
-            items = await conn.fetch("""
+            items = await conn.fetch(
+                """
                 SELECT oi.quantity, i.name, i.price
                 FROM orders_items oi
                 JOIN items i ON i.id = oi.item_id
                 WHERE oi.order_id = $1
-            """, order['id'])
+            """,
+                order['id'],
+            )
 
             for item in items:
-                ws.append([
-                    str(order['id']),
-                    order['created'].strftime('%Y-%m-%d %H:%M:%S'),
-                    order['address'],
-                    order['cashier_name'],
-                    item['name'],
-                    item['quantity'],
-                    float(item['price'])
-                ])
+                ws.append(
+                    [
+                        str(order['id']),
+                        order['created'].strftime('%Y-%m-%d %H:%M:%S'),
+                        order['address'],
+                        order['cashier_name'],
+                        item['name'],
+                        item['quantity'],
+                        float(item['price']),
+                    ]
+                )
 
         stream = io.BytesIO()
         wb.save(stream)
         stream.seek(0)
 
-        headers = {
-            'Content-Disposition': 'attachment; filename=orders.xlsx'
-        }
+        headers = {'Content-Disposition': 'attachment; filename=orders.xlsx'}
 
-        return StreamingResponse(stream, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        return StreamingResponse(
+            stream,
+            headers=headers,
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
 
 
 @router.get('/export/by_address')
@@ -291,9 +333,13 @@ async def export_by_address(order_for: date, request: Request):
     output = BytesIO()
     wb.save(output)
     output.seek(0)
-    return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers={
-        'Content-Disposition': f'attachment; filename=by_address_{order_for}.xlsx'
-    })
+    return StreamingResponse(
+        output,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={
+            'Content-Disposition': f'attachment; filename=by_address_{order_for}.xlsx'
+        },
+    )
 
 
 @router.get('/export/all_items')
@@ -322,23 +368,19 @@ async def export_all_items(order_for: date, request: Request):
     ws.title = 'All Items by Order'
 
     # Set headers
-    ws.append([
-        'Order ID',
-        'Name of Item',
-        'Quantity',
-        'Address',
-        'Order Date'
-    ])
+    ws.append(['Order ID', 'Name of Item', 'Quantity', 'Address', 'Order Date'])
 
     # Append data rows
     for row in rows:
-        ws.append([
-            str(row['order_id']),
-            row['item_name'],
-            row['quantity'],
-            row['address'],
-            row['order_for']
-        ])
+        ws.append(
+            [
+                str(row['order_id']),
+                row['item_name'],
+                row['quantity'],
+                row['address'],
+                row['order_for'],
+            ]
+        )
 
     # Prepare response
     output = BytesIO()
@@ -350,7 +392,7 @@ async def export_all_items(order_for: date, request: Request):
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         headers={
             'Content-Disposition': f'attachment; filename=all_items_{order_for}.xlsx'
-        }
+        },
     )
 
 
@@ -360,7 +402,9 @@ async def delete_order(request: Request, order_id: str = Form(...)):
     cashier_id = request.session.get('cashier_id')
     db = request.app.state.db
 
-    logging.info(f"Attempting to delete order with ID: '{order_id}' by cashier ID: {cashier_id}")
+    logging.info(
+        f"Attempting to delete order with ID: '{order_id}' by cashier ID: {cashier_id}"
+    )
 
     # Defensive check: empty or missing order_id
     if not order_id or not order_id.strip():
@@ -376,7 +420,9 @@ async def delete_order(request: Request, order_id: str = Form(...)):
 
     async with db.acquire() as conn:
         # Check if the user is an admin
-        cashier = await conn.fetchrow('SELECT is_admin FROM cashiers WHERE id = $1', cashier_id)
+        cashier = await conn.fetchrow(
+            'SELECT is_admin FROM cashiers WHERE id = $1', cashier_id
+        )
         if not cashier or not cashier['is_admin']:
             logging.warning(f'Unauthorized delete attempt by cashier ID: {cashier_id}')
             return RedirectResponse('/', status_code=302)
@@ -385,11 +431,15 @@ async def delete_order(request: Request, order_id: str = Form(...)):
             # Start transaction
             async with conn.transaction():
                 # Delete items
-                items_deleted = await conn.execute('DELETE FROM orders_items WHERE order_id = $1', order_uuid)
+                items_deleted = await conn.execute(
+                    'DELETE FROM orders_items WHERE order_id = $1', order_uuid
+                )
                 logging.info(f'Deleted from orders_items: {items_deleted}')
 
                 # Delete order
-                order_deleted = await conn.execute('DELETE FROM orders WHERE id = $1', order_uuid)
+                order_deleted = await conn.execute(
+                    'DELETE FROM orders WHERE id = $1', order_uuid
+                )
                 logging.info(f'Deleted from orders: {order_deleted}')
 
             if order_deleted and 'DELETE' in order_deleted:
@@ -397,8 +447,12 @@ async def delete_order(request: Request, order_id: str = Form(...)):
                 return RedirectResponse('/admin/orders', status_code=302)
             else:
                 logging.warning(f'No order deleted with ID {order_uuid}')
-                return HTMLResponse('Order not found or already deleted.', status_code=404)
+                return HTMLResponse(
+                    'Order not found or already deleted.', status_code=404
+                )
 
         except Exception as e:
             logging.error(f'Error deleting order {order_id}: {e}', exc_info=True)
-            return HTMLResponse('Internal server error while deleting the order.', status_code=500)
+            return HTMLResponse(
+                'Internal server error while deleting the order.', status_code=500
+            )

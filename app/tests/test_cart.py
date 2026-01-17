@@ -3,7 +3,6 @@ Test cart operations with mocked DB and Redis.
 """
 
 from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
@@ -73,6 +72,7 @@ async def test_place_order_empty_cart(client, mock_db_pool, mock_redis):
     mock_redis.hgetall.return_value = {}
 
     from app.services.order_service import EmptyCartError
+
     conn.execute.side_effect = EmptyCartError("Cart is empty")
 
     await client.post("/login", data={"cashier_id": ADMIN_ID})
@@ -96,34 +96,33 @@ async def test_place_order_empty_cart(client, mock_db_pool, mock_redis):
 #     mock_redis.delete.return_value = None
 
 #     conn.fetchrow.return_value = {
-#         "id": ADMIN_ID, 
-#         "name": "Admin", 
+#         "id": ADMIN_ID,
+#         "name": "Admin",
 #         "is_admin": True
 #     }
-    
+
 #     conn.fetch.return_value = [
 #         {"id": ITEM_ID, "name": "Test Item", "price": 100},
 #     ]
-    
-#     conn.execute.return_value = None
-    
-#     await client.post("/login", data={"cashier_id": ADMIN_ID})
-    
 
-    
+#     conn.execute.return_value = None
+
+#     await client.post("/login", data={"cashier_id": ADMIN_ID})
+
+
 #     from unittest.mock import patch, AsyncMock
-    
+
 #     mock_session = {
 #         "cashier_id": ADMIN_ID,
 #         "session_id": "some-session-id",
 #         "tg_id": "123456789"
 #     }
-    
+
 #     with patch("app.routes.extra_routes.Request.session", mock_session):
 #         response = await client.post(
 #             "/place_order",
 #             data={"order_for": "2026-01-17"},
 #             follow_redirects=False,
 #         )
-    
+
 #     assert response.status_code == 302

@@ -1,10 +1,8 @@
-from app.tests.fixtures.constants import ADMIN_ID, SHOP_ID, ITEM_ID
+from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID, SHOP_ID
 
 
 async def test_place_order(client, mock_redis):
-    mock_redis.hgetall.return_value = {
-        str(ITEM_ID): "2"
-    }
+    mock_redis.hgetall.return_value = {str(ITEM_ID): "2"}
 
     await client.post("/login", data={"cashier_id": ADMIN_ID})
 

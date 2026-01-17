@@ -1,9 +1,4 @@
-from app.tests.fixtures.constants import (
-    ADMIN_ID,
-    USER_ID,
-    SHOP_ID,
-    ITEM_ID,
-)
+from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID, SHOP_ID, USER_ID
 
 
 async def seed(conn):

@@ -5,7 +5,7 @@ Extra routes for authentication and main page.
 import uuid
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.redis import redis
 from app.settings.config import templates

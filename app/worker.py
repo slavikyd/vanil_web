@@ -47,7 +47,9 @@ async def main():
                         else:
                             crud_routes.router.carts[session_id].pop(item_id, None)
 
-                        print(f"✓ Cart update processed - Session: {session_id}, Item: {item_id}, Qty: {quantity}")
+                        print(
+                            f"✓ Cart update processed - Session: {session_id}, Item: {item_id}, Qty: {quantity}"
+                        )
 
                     except json.JSONDecodeError as e:
                         print(f"✗ Failed to parse message: {e}")
