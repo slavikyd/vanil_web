@@ -4,6 +4,12 @@ version = "0.1.0"
 description = ""
 authors = ["slavikyd <slavikyd@gmail.com>"]
 readme = "README.md"
+package-mode = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["app/tests"]
+
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -19,10 +25,13 @@ itsdangerous = "^2.2.0"
 aio-pika = "^9.5.5"
 openpyxl = "^3.1.5"
 redis = "^7.1.0"
+pytest = "^9.0.2"
+httpx = "^0.28.1"
 
 
 [tool.poetry.group.dev.dependencies]
 yoyo-migrations = "^9.0.0"
+pytest-asyncio = "^1.3.0"
 
 [build-system]
 requires = ["poetry-core"]

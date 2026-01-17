@@ -2,6 +2,8 @@
 Extra routes for authentication and main page.
 """
 
+import uuid
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
@@ -20,32 +22,43 @@ async def index(request: Request):
     cashier_id = request.session.get("cashier_id")
 
     if not cashier_id:
-        return templates.TemplateResponse("index.html", {"request": request, "cashier_id": None})
+        return templates.TemplateResponse(
+            "index.html",
+            {"request": request, "cashier_id": None},
+        )
+
+    # session id is REQUIRED
+    session_id = request.session.get("session_id")
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        request.session["session_id"] = session_id
+
+    # fetch cart from redis
+    cart = await redis.hgetall(cart_key(session_id))
+    cart = {k: int(v) for k, v in cart.items()}
 
     async with request.app.state.db.acquire() as conn:
         items = await conn.fetch(
             "SELECT id, name, price FROM items WHERE active = TRUE ORDER BY name ASC"
         )
-        cashier_record = await conn.fetchrow(
-            "SELECT is_admin FROM cashiers WHERE id = $1", cashier_id
+        cashier = await conn.fetchrow(
+            "SELECT is_admin FROM cashiers WHERE id = $1",
+            cashier_id,
         )
 
-    session_id = request.session.get("session_id")
-    cart = {}
-    if session_id:
-        cart = await redis.hgetall(cart_key(session_id))
+    items_list = [
+        {"id": str(i["id"]), "name": i["name"], "price": float(i["price"])}
+        for i in items
+    ]
 
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "items": [
-                {"id": str(i["id"]), "name": i["name"], "price": float(i["price"])}
-                for i in items
-            ],
+            "items": items_list,
             "cart": cart,
             "cashier_id": cashier_id,
-            "is_admin": cashier_record["is_admin"] if cashier_record else False,
+            "is_admin": cashier["is_admin"] if cashier else False,
         },
     )
 
@@ -54,15 +67,22 @@ async def index(request: Request):
 async def login(request: Request, cashier_id: str = Form(...)):
     async with request.app.state.db.acquire() as conn:
         cashier = await conn.fetchrow(
-            "SELECT id FROM cashiers WHERE id = $1", cashier_id
+            "SELECT id FROM cashiers WHERE id = $1",
+            cashier_id,
         )
         if not cashier:
             return templates.TemplateResponse(
                 "index.html",
-                {"request": request, "cashier_id": None, "error": "Invalid cashier ID"},
+                {
+                    "request": request,
+                    "cashier_id": None,
+                    "error": "Invalid cashier ID",
+                },
             )
 
     request.session["cashier_id"] = cashier_id
+    request.session["session_id"] = str(uuid.uuid4())
+
     return RedirectResponse("/", status_code=302)
 
 
@@ -91,10 +111,12 @@ async def get_data_json(request: Request):
             cashier_id,
         )
 
-    return JSONResponse({
-        "items": [
-            {"id": str(item["id"]), "name": item["name"], "price": float(item["price"])}
-            for item in items
-        ],
-        "is_admin": cashier["is_admin"] if cashier else False,
-    })
+    return JSONResponse(
+        {
+            "items": [
+                {"id": str(i["id"]), "name": i["name"], "price": float(i["price"])}
+                for i in items
+            ],
+            "is_admin": cashier["is_admin"] if cashier else False,
+        }
+    )

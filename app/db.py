@@ -5,18 +5,30 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DB_SCHEMA = os.getenv("DB_SCHEMA", "public")
+
+
 async def connect_db():
+    """
+    Create asyncpg pool with configurable schema (search_path).
+    Default schema: public
+    Test schema: test
+    """
     return await asyncpg.create_pool(
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASS"),
         database=os.getenv("DB_NAME"),
         host=os.getenv("DB_HOST"),
         port=int(os.getenv("DB_PORT", 5432)),
+        server_settings={
+            "search_path": DB_SCHEMA
+        },
     )
 
 
 async def load_all_orders_with_items(conn: asyncpg.Connection) -> list:
-    orders_raw = await conn.fetch("""
+    orders_raw = await conn.fetch(
+        """
         SELECT 
             o.id AS order_id,
             o.created,
@@ -27,24 +39,34 @@ async def load_all_orders_with_items(conn: asyncpg.Connection) -> list:
         FROM orders o
         LEFT JOIN cashiers c ON o.cashier_id = c.id
         ORDER BY o.created DESC
-    """)
+        """
+    )
 
     result = []
     for order in orders_raw:
-        items = await conn.fetch("""
+        items = await conn.fetch(
+            """
             SELECT 
-                i.name, oi.quantity, i.price
+                i.name,
+                oi.quantity,
+                i.price
             FROM order_items oi
             JOIN items i ON i.id = oi.item_id
             WHERE oi.order_id = $1
-        """, order["order_id"])
+            """,
+            order["order_id"],
+        )
 
-        result.append({
-            "id": order["order_id"],
-            "created": order["created"],
-            "cashier": order["cashier_name"] or f"ID {order['cashier_id']}",
-            "address": order["address"],
-            "shop": order["shop_id"],
-            "items": [dict(item) for item in items]
-        })
+        result.append(
+            {
+                "id": order["order_id"],
+                "created": order["created"],
+                "cashier": order["cashier_name"]
+                or f"ID {order['cashier_id']}",
+                "address": order["address"],
+                "shop": order["shop_id"],
+                "items": [dict(item) for item in items],
+            }
+        )
+
     return result

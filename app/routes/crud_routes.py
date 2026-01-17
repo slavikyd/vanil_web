@@ -4,135 +4,87 @@ CRUD routes for orders and cart management.
 
 import logging
 import uuid
-from datetime import datetime
 
+from app.redis import redis
+from app.services.cart_service import clear_cart, get_cart, set_item
+from app.services.order_service import (EmptyCartError, InvalidOrderDateError,
+                                        create_order)
+from app.settings.config import templates
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from app.redis import redis
-from app.settings.config import templates
-
-router = APIRouter(tags=["orders"])
+router = APIRouter(tags=["crud"])
 
 
-class AddToOrderRequest(BaseModel):
-    item_id: str
-    quantity: int
-    tg_id: str | None = None
-
-
-def cart_key(session_id: str) -> str:
-    return f"cart:{session_id}"
-
-
-@router.post("/add-to-order")
-async def add_to_order(request: Request, order_data: AddToOrderRequest):
-    cashier_id = request.session.get("cashier_id")
-    if not cashier_id:
-        return JSONResponse({"error": "Unauthorized: No cashier logged in"}, status_code=401)
-
+@router.post("/add-to-cart")
+async def add_to_cart(
+    request: Request,
+    item_id: str = Form(...),
+    quantity: int = Form(...),
+):
     session_id = request.session.get("session_id")
     if not session_id:
-        session_id = str(uuid.uuid4())
-        request.session["session_id"] = session_id
+        return RedirectResponse("/", status_code=302)
 
-    key = cart_key(session_id)
+    await set_item(session_id, item_id, quantity)
 
-    if order_data.quantity > 0:
-        await redis.hset(key, order_data.item_id, order_data.quantity)
-        await redis.expire(key, 1800)
-    else:
-        await redis.hdel(key, order_data.item_id)
+    return RedirectResponse("/", status_code=302)
 
-    async with request.app.state.db.acquire() as conn:
-        items_from_db = await conn.fetch(
-            "SELECT id, name, price FROM items ORDER BY name ASC"
-        )
 
-    cart = await redis.hgetall(key)
+@router.post("/remove-from-cart")
+async def remove_from_cart(
+    request: Request,
+    item_id: str = Form(...),
+):
+    session_id = request.session.get("session_id")
+    if not session_id:
+        return RedirectResponse("/", status_code=302)
 
-    return JSONResponse({
-        "cart": cart,
-        "items_data": [
-            {
-                "id": str(item["id"]),
-                "name": item["name"],
-                "price": float(item["price"]),
-            }
-            for item in items_from_db
-        ],
-    })
+    await set_item(session_id, item_id, 0)
+
+    return RedirectResponse("/", status_code=302)
 
 
 @router.post("/place_order")
 async def place_order(
     request: Request,
-    tg_id: str = Form(...),
     order_for: str = Form(...),
 ):
-    cashier_id = request.session.get("cashier_id")
+    session = request.session
+
+    cashier_id = session.get("cashier_id")
+    shop_id = session.get("tg_id")
+    session_id = session.get("session_id")
+
     if not cashier_id:
         return RedirectResponse("/", status_code=302)
 
-    session_id = request.session.get("session_id")
-    if not session_id:
-        return HTMLResponse("Cart not found", status_code=400)
+    if not shop_id or not session_id:
+        return HTMLResponse("Invalid session", status_code=400)
 
-    key = cart_key(session_id)
-    cart = await redis.hgetall(key)
 
-    if not cart:
-        return HTMLResponse("Your cart is empty. Nothing to order.", status_code=400)
+    cart = await get_cart(session_id)
 
     try:
-        order_for_date = datetime.strptime(order_for, "%Y-%m-%d").date()
-    except ValueError:
-        return HTMLResponse("Invalid date format", status_code=400)
+        await create_order(
+            db=request.app.state.db,
+            cashier_id=cashier_id,
+            shop_id=shop_id,
+            cart=cart,
+            order_for=order_for,
+        )
+    except EmptyCartError:
+        return HTMLResponse("Cart is empty", status_code=400)
+    except InvalidOrderDateError:
+        return HTMLResponse("Invalid order date", status_code=400)
+    except Exception as e:
+        return HTMLResponse(f"Failed to create order: {e}", status_code=500)
 
-    db = request.app.state.db
+    await clear_cart(session_id)
 
-    async with db.acquire() as conn:
-        async with conn.transaction():
-            shop = await conn.fetchrow(
-                "SELECT id, address FROM shops WHERE id = $1", tg_id
-            )
-            if not shop:
-                return HTMLResponse("Shop not registered", status_code=400)
-
-            cashier = await conn.fetchrow(
-                "SELECT id FROM cashiers WHERE id = $1", cashier_id
-            )
-            if not cashier:
-                return HTMLResponse("Cashier not registered", status_code=400)
-
-            order_id = uuid.uuid4()
-
-            await conn.execute(
-                """
-                INSERT INTO orders (id, cashier_id, shop_id, address, order_for)
-                VALUES ($1, $2, $3, $4, $5)
-                """,
-                order_id,
-                cashier_id,
-                tg_id,
-                shop["address"],
-                order_for_date,
-            )
-
-            for item_id, qty in cart.items():
-                await conn.execute(
-                    """
-                    INSERT INTO orders_items (order_id, item_id, quantity)
-                    VALUES ($1, $2, $3)
-                    """,
-                    order_id,
-                    uuid.UUID(item_id),
-                    int(qty),
-                )
-
-    await redis.delete(key)
     return RedirectResponse("/", status_code=302)
+
 
 
 @router.get("/orders", response_class=HTMLResponse)
