@@ -39,8 +39,12 @@ jobs:
           pip install pytest pytest-cov ruff
           poetry config virtualenvs.create false && poetry install --no-root
       - name: Migrations
+        env:
+          DB_URL_MIGRATIONS: postgresql://test:test@localhost:5432/test_db
         run: |
-            poetry run yoyo apply --batch --database ${DB_URL_MIGRATIONS} migrations
+          set -euo pipefail
+          poetry run yoyo apply --batch --database "${DB_URL_MIGRATIONS:?DB_URL_MIGRATIONS is missing}" migrations
+
          
       
       - name: Linter

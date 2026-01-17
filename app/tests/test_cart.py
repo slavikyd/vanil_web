@@ -1,128 +1,75 @@
 """
 Test cart operations with mocked DB and Redis.
 """
-
 from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID
 
 
 async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
-    """Test adding an item to cart successfully."""
     pool, conn = mock_db_pool
 
-    conn.fetchrow.return_value = {
-        "id": ADMIN_ID,
-        "name": "Admin",
-        "is_admin": True,
-    }
+    # login: SELECT id FROM cashiers WHERE id=$1
+    conn.fetchrow.return_value = {"id": ADMIN_ID}
 
-    resp_login = await client.post("/login", data={"cashier_id": ADMIN_ID})
-    assert resp_login.status_code in (200, 302)
+    # /add-to-cart делает SELECT items...
+    conn.fetch.return_value = [{"id": ITEM_ID, "name": "Test Item", "price": 10.0}]
+
+    # get_cart() после set_item()
+    mock_redis.hgetall.return_value = {str(ITEM_ID): "2"}
+
+    resp_login = await client.post("/login", data={"cashier_id": ADMIN_ID}, follow_redirects=False)
+    assert resp_login.status_code == 302
 
     response = await client.post(
         "/add-to-cart",
-        data={"item_id": str(ITEM_ID), "quantity": 2},
+        data={"itemid": str(ITEM_ID), "quantity": 2},
         follow_redirects=False,
     )
 
-    assert response.status_code == 302
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["cart"][str(ITEM_ID)] == 2
+    assert any(i["id"] == str(ITEM_ID) for i in data["items_data"])
 
 
-async def test_add_item_to_cart_no_session(client, mock_redis):
-    """Test adding to cart without session redirects to home."""
+async def test_add_item_to_cart_no_session(client, mock_db_pool, mock_redis):
+    # Даже без логина корзина должна работать (session_id создаётся автоматически)
+    pool, conn = mock_db_pool
+    conn.fetch.return_value = []
+    mock_redis.hgetall.return_value = {str(ITEM_ID): "1"}
+
     response = await client.post(
         "/add-to-cart",
-        data={"item_id": str(ITEM_ID), "quantity": 1},
+        data={"itemid": str(ITEM_ID), "quantity": 1},
         follow_redirects=False,
     )
 
-    assert response.status_code == 302
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cart"][str(ITEM_ID)] == 1
 
 
-async def test_remove_from_cart(client, mock_db_pool, mock_redis):
-    """Test removing an item from cart."""
-    pool, conn = mock_db_pool
-
-    conn.fetchrow.return_value = {
-        "id": ADMIN_ID,
-        "name": "Admin",
-        "is_admin": True,
-    }
-
-    await client.post("/login", data={"cashier_id": ADMIN_ID})
-
+async def test_remove_from_cart(client, mock_redis):
     response = await client.post(
-        "/remove-from-cart",
-        data={"item_id": str(ITEM_ID)},
-        follow_redirects=False,
+    "/remove-from-cart",
+    data={"itemid": str(ITEM_ID)},  # было item_id
+    follow_redirects=False,
     )
-
     assert response.status_code == 302
+
 
 
 async def test_place_order_empty_cart(client, mock_db_pool, mock_redis):
-    """Test placing order with empty cart fails with 400."""
     pool, conn = mock_db_pool
+    conn.fetchrow.return_value = {"id": ADMIN_ID}  # login ok
+    mock_redis.hgetall.return_value = {}  # empty cart
 
-    conn.fetchrow.return_value = {
-        "id": ADMIN_ID,
-        "name": "Admin",
-        "is_admin": True,
-    }
-
-    mock_redis.hgetall.return_value = {}
-
-    from app.services.order_service import EmptyCartError
-
-    conn.execute.side_effect = EmptyCartError("Cart is empty")
-
-    await client.post("/login", data={"cashier_id": ADMIN_ID})
+    await client.post("/login", data={"cashier_id": ADMIN_ID}, follow_redirects=False)
 
     response = await client.post(
         "/place_order",
-        data={"order_for": "2026-01-17"},
+        data={"order_for": "2026-01-17", "tg_id": "shop-test"},
         follow_redirects=False,
     )
 
     assert response.status_code == 400
-
-
-# TODO Figure smth out with that
-
-# async def test_place_order_success(client, mock_db_pool, mock_redis):
-#     """Test placing order with items in cart."""
-#     pool, conn = mock_db_pool
-
-#     mock_redis.hgetall.return_value = {str(ITEM_ID): 2}
-#     mock_redis.delete.return_value = None
-
-#     conn.fetchrow.return_value = {
-#         "id": ADMIN_ID,
-#         "name": "Admin",
-#         "is_admin": True
-#     }
-
-#     conn.fetch.return_value = [
-#         {"id": ITEM_ID, "name": "Test Item", "price": 100},
-#     ]
-
-#     conn.execute.return_value = None
-
-#     await client.post("/login", data={"cashier_id": ADMIN_ID})
-
-
-#     from unittest.mock import patch, AsyncMock
-
-#     mock_session = {
-#         "cashier_id": ADMIN_ID,
-#         "session_id": "some-session-id",
-#         "tg_id": "123456789"
-#     }
-
-#     with patch("app.routes.extra_routes.Request.session", mock_session):
-#         response = await client.post(
-#             "/place_order",
-#             data={"order_for": "2026-01-17"},
-#             follow_redirects=False,
-#         )
-
-#     assert response.status_code == 302
