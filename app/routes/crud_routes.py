@@ -1,19 +1,21 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+import app.http_codes as code
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow
 from app.routes.session_utils import get_or_create_session_id
 from app.services.cart_service import CartService
-from app.services.order_service import EmptyCartError, InvalidOrderDateError, OrderService
+from app.services.order_service import (EmptyCartError, InvalidOrderDateError,
+                                        OrderService)
 from app.services.public_service import PublicService
 from app.settings.config import templates
 
-router = APIRouter(tags=["crud"])
+router = APIRouter(tags=['crud'])
 
 
-@router.post("/add-to-cart")
+@router.post('/add-to-cart')
 async def add_to_cart(
     request: Request,
     uow: AsyncpgUnitOfWork = Depends(get_uow),
@@ -26,7 +28,7 @@ async def add_to_cart(
     session_id = get_or_create_session_id(session)
 
     if tg_id:
-        session["tg_id"] = tg_id
+        session['tg_id'] = tg_id
 
     await CartService.set_item(
         cart_repo=cart_repo,
@@ -37,10 +39,10 @@ async def add_to_cart(
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
     items_data = await PublicService.list_active_items(uow=uow)
 
-    return JSONResponse({"cart": cart, "items_data": items_data})
+    return JSONResponse({'cart': cart, 'items_data': items_data})
 
 
-@router.post("/remove-from-cart")
+@router.post('/remove-from-cart')
 async def remove_from_cart(
     request: Request,
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
@@ -53,10 +55,10 @@ async def remove_from_cart(
         item_id=item_id,
         quantity=0,
     )
-    return RedirectResponse("/", status_code=302)
+    return RedirectResponse('/', status_code=code.FOUND)
 
 
-@router.post("/place_order")
+@router.post('/place_order')
 async def place_order(
     request: Request,
     uow: AsyncpgUnitOfWork = Depends(get_uow),
@@ -66,18 +68,18 @@ async def place_order(
 ):
     session = request.session
 
-    cashier_id = session.get("cashier_id")
+    cashier_id = session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse("/", status_code=302)
+        return RedirectResponse('/', status_code=code.FOUND)
 
-    session_id = session.get("session_id")
+    session_id = session.get('session_id')
     if not session_id:
-        return HTMLResponse("Invalid session", status_code=400)
+        return HTMLResponse('Invalid session', status_code=code.BAD_REQUEST)
 
     if tg_id:
-        session["tg_id"] = tg_id
+        session['tg_id'] = tg_id
 
-    shop_id = session.get("tg_id")
+    shop_id = session.get('tg_id')
 
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
 
@@ -90,26 +92,30 @@ async def place_order(
             order_for=order_for,
         )
     except EmptyCartError:
-        return HTMLResponse("Cart is empty", status_code=400)
+        return HTMLResponse('Cart is empty', status_code=code.BAD_REQUEST)
     except InvalidOrderDateError:
-        return HTMLResponse("Invalid order date", status_code=400)
+        return HTMLResponse('Invalid order date', status_code=code.BAD_REQUEST)
     except Exception as e:
-        return HTMLResponse(f"Failed to create order: {e}", status_code=500)
+        return HTMLResponse(
+            f'Failed to create order: {e}', status_code=code.INTERNAL_SERVER_ERROR
+        )
 
     await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
-    return RedirectResponse("/", status_code=302)
+    return RedirectResponse('/', status_code=code.FOUND)
 
 
-@router.get("/orders", response_class=HTMLResponse)
+@router.get('/orders', response_class=HTMLResponse)
 async def orders_view(
     request: Request,
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
-    cashier_id = request.session.get("cashier_id")
+    cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse("/", status_code=302)
+        return RedirectResponse('/', status_code=code.FOUND)
 
     assert uow.orders is not None
     orders = await uow.orders.list_orders_for_view()
 
-    return templates.TemplateResponse("orders.html", {"request": request, "orders": orders})
+    return templates.TemplateResponse(
+        'orders.html', {'request': request, 'orders': orders}
+    )

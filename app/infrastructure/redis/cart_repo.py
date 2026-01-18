@@ -5,7 +5,7 @@ CART_TTL_SECONDS = 1800
 
 class RedisCartRepo:
     def _key(self, session_id: str) -> str:
-        return f"cart:{session_id}"
+        return f'cart:{session_id}'
 
     async def get_cart(self, *, session_id: str) -> dict[str, int]:
         raw = await redis.hgetall(self._key(session_id))

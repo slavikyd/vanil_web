@@ -1,4 +1,5 @@
 from typing import AsyncIterator
+
 from fastapi import Request
 
 from app.infrastructure.redis.cart_repo import RedisCartRepo

@@ -21,10 +21,10 @@ class IndexService:
         is_admin = await AuthService.ensure_admin(uow=uow, cashier_id=cashier_id)
 
         return {
-            "items": items,
-            "cart": cart,
-            "cashier_id": cashier_id,
-            "is_admin": is_admin,
+            'items': items,
+            'cart': cart,
+            'cashier_id': cashier_id,
+            'is_admin': is_admin,
         }
 
     @staticmethod
@@ -40,7 +40,7 @@ class IndexService:
         is_admin = await AuthService.ensure_admin(uow=uow, cashier_id=cashier_id)
 
         return {
-            "items": items,
-            "cart": cart,
-            "is_admin": is_admin,
+            'items': items,
+            'cart': cart,
+            'is_admin': is_admin,
         }

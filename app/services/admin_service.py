@@ -1,7 +1,7 @@
 import io
 import uuid
 from collections import defaultdict
-from datetime import datetime, date
+from datetime import date, datetime
 from io import BytesIO
 
 import openpyxl
@@ -12,7 +12,9 @@ from app.infrastructure.uow import AsyncpgUnitOfWork
 
 class AdminService:
     @staticmethod
-    async def create_item(*, uow: AsyncpgUnitOfWork, name: str, price: float, ttl: int) -> None:
+    async def create_item(
+        *, uow: AsyncpgUnitOfWork, name: str, price: float, ttl: int
+    ) -> None:
         assert uow.items is not None
         await uow.items.create(name=name, price=price, ttl=ttl)
 
@@ -27,13 +29,17 @@ class AdminService:
         return await uow.items.list_for_admin()
 
     @staticmethod
-    async def toggle_items(*, uow: AsyncpgUnitOfWork, active_map: dict[uuid.UUID, bool]) -> None:
+    async def toggle_items(
+        *, uow: AsyncpgUnitOfWork, active_map: dict[uuid.UUID, bool]
+    ) -> None:
         assert uow.items is not None
         for item_id, is_active in active_map.items():
             await uow.items.set_active(item_id=item_id, active=is_active)
 
     @staticmethod
-    async def get_orders(*, uow: AsyncpgUnitOfWork, order_for: str | None, address: str | None) -> dict:
+    async def get_orders(
+        *, uow: AsyncpgUnitOfWork, order_for: str | None, address: str | None
+    ) -> dict:
         assert uow.orders is not None
 
         order_for_date: date | None = None
@@ -68,7 +74,9 @@ class AdminService:
         return await uow.orders.delete_order(order_id=order_id)
 
     @staticmethod
-    async def export_orders(*, uow: AsyncpgUnitOfWork, address: str | None) -> io.BytesIO:
+    async def export_orders(
+        *, uow: AsyncpgUnitOfWork, address: str | None
+    ) -> io.BytesIO:
         assert uow.orders is not None
 
         orders = await uow.orders.export_orders_list(address=address)
@@ -82,7 +90,17 @@ class AdminService:
             name = addr[:31]
             ws = sheets.setdefault(name, wb.create_sheet(title=name))
             if ws.max_row == 1:
-                ws.append(["Order ID", "Created", "Address", "Cashier", "Item", "Qty", "Price"])
+                ws.append(
+                    [
+                        "Order ID",
+                        "Created",
+                        "Address",
+                        "Cashier",
+                        "Item",
+                        "Qty",
+                        "Price",
+                    ]
+                )
 
             items = await uow.orders.export_order_items(order_id=uuid.UUID(o["id"]))
             for it in items:

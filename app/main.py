@@ -1,6 +1,7 @@
 import logging
 import os
 
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,60 +17,51 @@ logger = logging.getLogger(__name__)
 
 setup_logging()
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount('/static', StaticFiles(directory='app/static'), name='static')
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://yourdomain.com",
-        "https://yourdomain.com",
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://yourdomain.com',
+        'https://yourdomain.com',
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
-app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY"))
+app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET_KEY'))
 
 
-@app.on_event("startup")
+@app.on_event('startup')
 async def startup():
     """Initialize database connection on startup."""
     app.state.db = await connect_db()
-    app.state.cart = {"items": {}}
+    app.state.cart = {'items': {}}
 
 
-@app.on_event("shutdown")
+@app.on_event('shutdown')
 async def shutdown():
-    logger.info("Shutting down application...")
+    logger.info('Shutting down application...')
 
     try:
         await redis.close()
-        logger.info("Redis connection closed")
+        logger.info('Redis connection closed')
     except Exception as e:
-        logger.warning(f"Error closing Redis: {e}")
+        logger.warning(f'Error closing Redis: {e}')
 
     try:
         await app.state.db.close()
-        logger.info("Database pool closed")
+        logger.info('Database pool closed')
     except Exception as e:
-        logger.warning(f"Error closing DB pool: {e}")
+        logger.warning(f'Error closing DB pool: {e}')
 
 
-# Include all route modules
-app.include_router(
-    extra_routes.router
-)  # Auth & main routes (GET /, POST /login, POST /logout)
-app.include_router(
-    crud_routes.router
-)  # CRUD operations (POST /add-to-order, POST /place_order, GET /orders)
-app.include_router(
-    admin_routes.router
-)  # Admin operations (GET /admin/*, POST /admin/*)
+app.include_router(extra_routes.router)
+app.include_router(crud_routes.router)
+app.include_router(admin_routes.router)
+if __name__ == '__main__':
 
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host='0.0.0.0', port=8000)

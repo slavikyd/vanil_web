@@ -1,5 +1,6 @@
 import uuid
 from datetime import date
+
 from asyncpg import Connection
 
 
@@ -51,36 +52,40 @@ class OrdersRepo:
         )
         return [
             {
-                "id": str(r["id"]),
-                "created": r["created"],
-                "address": r["address"],
-                "cashier_name": r["cashier_name"],
+                'id': str(r['id']),
+                'created': r['created'],
+                'address': r['address'],
+                'cashier_name': r['cashier_name'],
             }
             for r in rows
         ]
 
     async def delete_order(self, *, order_id: uuid.UUID) -> bool:
         async with self._conn.transaction():
-            await self._conn.execute("DELETE FROM orders_items WHERE order_id = $1", order_id)
-            res = await self._conn.execute("DELETE FROM orders WHERE id = $1", order_id)
-        return "DELETE" in res
+            await self._conn.execute(
+                'DELETE FROM orders_items WHERE order_id = $1', order_id
+            )
+            res = await self._conn.execute('DELETE FROM orders WHERE id = $1', order_id)
+        return 'DELETE' in res
 
-    async def admin_rows(self, *, order_for: date | None, address: str | None) -> list[dict]:
+    async def admin_rows(
+        self, *, order_for: date | None, address: str | None
+    ) -> list[dict]:
         where = []
         args: list[object] = []
         idx = 1
 
         if order_for is not None:
-            where.append(f"o.order_for = ${idx}")
+            where.append(f'o.order_for = ${idx}')
             args.append(order_for)
             idx += 1
 
         if address:
-            where.append(f"o.address ILIKE ${idx}")
-            args.append(f"%{address}%")
+            where.append(f'o.address ILIKE ${idx}')
+            args.append(f'%{address}%')
             idx += 1
 
-        wheresql = f"WHERE {' AND '.join(where)}" if where else ""
+        wheresql = f'WHERE {' AND '.join(where)}' if where else ''
 
         rows = await self._conn.fetch(
             f"""
@@ -104,23 +109,23 @@ class OrdersRepo:
 
         return [
             {
-                "order_id": str(r["order_id"]),
-                "order_for": r["order_for"],
-                "created": r["created"],
-                "address": r["address"],
-                "cashier_name": r["cashier_name"],
-                "item_name": r["item_name"],
-                "quantity": r["quantity"],
+                'order_id': str(r['order_id']),
+                'order_for': r['order_for'],
+                'created': r['created'],
+                'address': r['address'],
+                'cashier_name': r['cashier_name'],
+                'item_name': r['item_name'],
+                'quantity': r['quantity'],
             }
             for r in rows
         ]
 
     async def export_orders_list(self, *, address: str | None) -> list[dict]:
         args: list[object] = []
-        where = ""
+        where = ''
         if address:
-            where = "WHERE o.address ILIKE $1"
-            args.append(f"%{address}%")
+            where = 'WHERE o.address ILIKE $1'
+            args.append(f'%{address}%')
 
         rows = await self._conn.fetch(
             f"""
@@ -135,10 +140,10 @@ class OrdersRepo:
 
         return [
             {
-                "id": str(r["id"]),
-                "created": r["created"],
-                "address": r["address"],
-                "cashier_name": r["cashier_name"],
+                'id': str(r['id']),
+                'created': r['created'],
+                'address': r['address'],
+                'cashier_name': r['cashier_name'],
             }
             for r in rows
         ]
@@ -153,7 +158,10 @@ class OrdersRepo:
             """,
             order_id,
         )
-        return [{"name": r["name"], "quantity": r["quantity"], "price": float(r["price"])} for r in rows]
+        return [
+            {'name': r['name'], 'quantity': r['quantity'], 'price': float(r['price'])}
+            for r in rows
+        ]
 
     async def export_by_address_rows(self, *, order_for: date) -> list[dict]:
         rows = await self._conn.fetch(
@@ -167,4 +175,7 @@ class OrdersRepo:
             """,
             order_for,
         )
-        return [{"address": r["address"], "name": r["name"], "quantity": r["quantity"]} for r in rows]
+        return [
+            {'address': r['address'], 'name': r['name'], 'quantity': r['quantity']}
+            for r in rows
+        ]
