@@ -144,3 +144,28 @@ class AdminService:
         wb.save(output)
         output.seek(0)
         return output
+
+    @staticmethod
+    async def export_all_items(*, uow: AsyncpgUnitOfWork, order_for: date) -> BytesIO:
+        assert uow.orders is not None
+
+        rows = await uow.orders.export_by_address_rows(order_for=order_for)
+
+        totals: dict[str, int] = defaultdict(int)
+        for r in rows:
+            name = r["name"]
+            qty = int(r["quantity"])
+            totals[name] += qty
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "All items"
+        ws.append(["Item", "Quantity"])
+
+        for name in sorted(totals.keys()):
+            ws.append([name, totals[name]])
+
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return output
