@@ -1,16 +1,15 @@
-from fastapi import Request
+from app.infrastructure.uow import AsyncpgUnitOfWork
 
 
 class AuthService:
     @staticmethod
-    async def ensure_admin(request: Request) -> bool:
-        cashier_id = request.session.get('cashier_id')
+    async def ensure_admin(*, uow: AsyncpgUnitOfWork, cashier_id: str | None) -> bool:
         if not cashier_id:
             return False
+        assert uow.cashiers is not None
+        return await uow.cashiers.is_admin(cashier_id=cashier_id)
 
-        async with request.app.state.db.acquire() as conn:
-            cashier = await conn.fetchrow(
-                'SELECT is_admin FROM cashiers WHERE id = $1',
-                cashier_id,
-            )
-            return bool(cashier and cashier['is_admin'])
+    @staticmethod
+    async def cashier_exists(*, uow: AsyncpgUnitOfWork, cashier_id: str) -> bool:
+        assert uow.cashiers is not None
+        return await uow.cashiers.exists(cashier_id=cashier_id)

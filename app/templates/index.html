@@ -36,6 +36,7 @@
         }
     </script>
 
+
     {% if not cashier_id %}
         <h2 style="text-align: center;">Введите ID кассира для входа</h2>
         {% if error %}
@@ -47,7 +48,7 @@
         </form>
     {% else %}
         <h1 style="text-align: center;">Заказ</h1>
-        
+
         <div class="page-container">
             <div class="grid">
                 {% for item in items %}
@@ -61,7 +62,7 @@
                 </div>
                 {% endfor %}
             </div>
-            
+
             <!-- SERVER-SIDE FALLBACK -->
             <ul class="items-list" style="padding-left: 0;">
                 {% if cart %}
@@ -74,7 +75,7 @@
                     <li>Ваша корзина пуста.</li>
                 {% endif %}
             </ul>
-            
+
             <div>
                 <hr>
                 <form id="orderForm" action="/place_order" method="post" style="text-align: center; margin-top: 2em;">
@@ -84,14 +85,14 @@
                     <br>
                     <button type="submit">Создать заявку</button>
                 </form>
-                
+
                 <div style="display: flex; justify-content: space-between; margin-top: 1em;">
                     <a href="/orders">Посмотреть заявки</a>
                     <form action="/logout" method="post">
                         <button type="submit">Выйти</button>
                     </form>
                 </div>
-                
+
                 {% if is_admin %}
                     <div style="margin-top: 3em; text-align: center;">
                         <a href="/admin/orders">Админ: Все заявки</a>
@@ -100,6 +101,7 @@
                 {% endif %}
             </div>
         </div>
+
 
         <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -112,13 +114,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('itemid', itemId);
         formData.append('quantity', qty);
-        const tgid = getTgId();
-        if (tgid) formData.append('tgid', tgid);
+
+        const tgId = getTgId();
+        if (tgId) formData.append('tg_id', tgId);
 
         const resp = await fetch('/add-to-cart', { method: 'POST', body: formData });
         if (resp.ok) {
             const json = await resp.json();
             renderOrder(json.cart, json.items_data);
+
             // Синхронизируем input в карточке
             const input = document.getElementById(`quantity-${itemId}`);
             if (input) input.value = qty;
@@ -128,14 +132,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderOrder(cart, items) {
         orderList.innerHTML = '';
         let hasItems = false;
-        
+
         for (const id in cart) {
             const qty = cart[id];
             if (qty > 0) {
                 hasItems = true;
                 const item = items.find(i => String(i.id) === id);
                 if (!item) continue;
-                
+
                 const li = document.createElement('li');
                 li.className = 'cart-item';  // Для event delegation
                 li.dataset.itemId = id;
@@ -161,10 +165,10 @@ document.addEventListener('DOMContentLoaded', () => {
     orderList.addEventListener('click', (e) => {
         const li = e.target.closest('.cart-item');
         if (!li) return;
-        
+
         const id = li.dataset.itemId;
         const qty = parseInt(li.dataset.itemQty);
-        
+
         if (e.target.classList.contains('cart-minus')) {
             sendUpdate(id, qty - 1);
         } else if (e.target.classList.contains('cart-plus')) {
@@ -178,19 +182,19 @@ document.addEventListener('DOMContentLoaded', () => {
     selectors.forEach(s => {
         const input = s.querySelector('input');
         const id = input.dataset.itemId;
-        
+
         s.querySelector('.quantity-plus').onclick = () => {
             const newQty = parseInt(input.value) + 1;
             input.value = newQty;
             sendUpdate(id, newQty);
         };
-        
+
         s.querySelector('.quantity-minus').onclick = () => {
             const newQty = Math.max(0, parseInt(input.value) - 1);
             input.value = newQty;
             sendUpdate(id, newQty);
         };
-        
+
         input.onchange = () => sendUpdate(id, parseInt(input.value) || 0);
     });
 
@@ -202,7 +206,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 </script>
-
 
     {% endif %}
 </body>

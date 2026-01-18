@@ -1,187 +1,102 @@
 import io
-import logging
 import uuid
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import datetime, date
 from io import BytesIO
-from uuid import UUID
 
 import openpyxl
 from openpyxl import Workbook
 
+from app.infrastructure.uow import AsyncpgUnitOfWork
+
 
 class AdminService:
+    @staticmethod
+    async def create_item(*, uow: AsyncpgUnitOfWork, name: str, price: float, ttl: int) -> None:
+        assert uow.items is not None
+        await uow.items.create(name=name, price=price, ttl=ttl)
 
     @staticmethod
-    async def create_item(db, name: str, price: float, ttl: int):
-        async with db.acquire() as conn:
-            await conn.execute(
-                'INSERT INTO items (name, price, ttl, active) VALUES ($1, $2, $3, TRUE)',
-                name,
-                price,
-                ttl,
-            )
+    async def delete_item(*, uow: AsyncpgUnitOfWork, item_id: uuid.UUID) -> None:
+        assert uow.items is not None
+        await uow.items.delete(item_id=item_id)
 
     @staticmethod
-    async def delete_item(db, item_id: uuid.UUID):
-        async with db.acquire() as conn:
-            await conn.execute(
-                'DELETE FROM items WHERE id = $1',
-                item_id,
-            )
+    async def list_items(*, uow: AsyncpgUnitOfWork) -> list[dict]:
+        assert uow.items is not None
+        return await uow.items.list_for_admin()
 
     @staticmethod
-    async def list_items(db):
-        async with db.acquire() as conn:
-            return await conn.fetch('SELECT id, name, active FROM items ORDER BY name')
+    async def toggle_items(*, uow: AsyncpgUnitOfWork, active_map: dict[uuid.UUID, bool]) -> None:
+        assert uow.items is not None
+        for item_id, is_active in active_map.items():
+            await uow.items.set_active(item_id=item_id, active=is_active)
 
     @staticmethod
-    async def toggle_items(db, active_map: dict):
-        async with db.acquire() as conn:
-            for item_id, is_active in active_map.items():
-                await conn.execute(
-                    'UPDATE items SET active = $1 WHERE id = $2',
-                    is_active,
-                    item_id,
-                )
+    async def get_orders(*, uow: AsyncpgUnitOfWork, order_for: str | None, address: str | None) -> dict:
+        assert uow.orders is not None
 
-    @staticmethod
-    async def get_orders(db, order_for: str | None, address: str | None):
-        where = []
-        args = []
-        idx = 1
-
+        order_for_date: date | None = None
         if order_for:
             try:
-                order_date = datetime.strptime(order_for, '%Y-%m-%d').date()
-                where.append(f'o.order_for = ${idx}')
-                args.append(order_date)
-                idx += 1
+                order_for_date = datetime.strptime(order_for, "%Y-%m-%d").date()
             except ValueError:
-                logging.warning(f'Invalid date: {order_for}')
+                order_for_date = None
 
-        if address:
-            where.append(f'o.address ILIKE ${idx}')
-            args.append(f'%{address}%')
-            idx += 1
+        rows = await uow.orders.admin_rows(order_for=order_for_date, address=address)
 
-        where_sql = f"WHERE {' AND '.join(where)}" if where else ''
-
-        async with db.acquire() as conn:
-            rows = await conn.fetch(
-                f"""
-                SELECT
-                    o.id AS order_id,
-                    o.order_for,
-                    o.created,
-                    o.address,
-                    c.full_name AS cashier_name,
-                    oi.quantity,
-                    i.name AS item_name
-                FROM orders o
-                JOIN cashiers c ON o.cashier_id = c.id
-                JOIN orders_items oi ON oi.order_id = o.id
-                JOIN items i ON oi.item_id = i.id
-                {where_sql}
-                ORDER BY o.order_for ASC, o.created ASC
-                """,
-                *args,
-            )
-
-        grouped = {}
+        grouped: dict = {}
         for r in rows:
-            d = r['order_for']
-            oid = str(r['order_id'])
+            d = r["order_for"]
+            oid = r["order_id"]
             grouped.setdefault(d, {}).setdefault(
                 oid,
                 {
-                    'id': oid,
-                    'created': r['created'],
-                    'address': r['address'],
-                    'cashier_name': r['cashier_name'],
-                    'items': [],
+                    "id": oid,
+                    "created": r["created"],
+                    "address": r["address"],
+                    "cashier_name": r["cashier_name"],
+                    "items": [],
                 },
-            )['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
+            )["items"].append({"name": r["item_name"], "quantity": r["quantity"]})
 
         return grouped
 
     @staticmethod
-    async def delete_order(db, order_id: uuid.UUID):
-        async with db.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(
-                    'DELETE FROM orders_items WHERE order_id = $1',
-                    order_id,
-                )
-                result = await conn.execute(
-                    'DELETE FROM orders WHERE id = $1',
-                    order_id,
-                )
-        return 'DELETE' in result
+    async def delete_order(*, uow: AsyncpgUnitOfWork, order_id: uuid.UUID) -> bool:
+        assert uow.orders is not None
+        return await uow.orders.delete_order(order_id=order_id)
 
     @staticmethod
-    async def export_orders(db, address: str | None):
-        async with db.acquire() as conn:
-            query = """
-                SELECT o.id, o.created, o.address, c.full_name AS cashier_name
-                FROM orders o
-                JOIN cashiers c ON o.cashier_id = c.id
-            """
-            args = []
-            if address:
-                query += ' WHERE o.address ILIKE $1'
-                args.append(f'%{address}%')
-            query += ' ORDER BY o.created DESC'
+    async def export_orders(*, uow: AsyncpgUnitOfWork, address: str | None) -> io.BytesIO:
+        assert uow.orders is not None
 
-            orders = await conn.fetch(query, *args)
+        orders = await uow.orders.export_orders_list(address=address)
 
-            wb = Workbook()
-            wb.remove(wb.active)
-            sheets = {}
+        wb = Workbook()
+        wb.remove(wb.active)
 
-            for o in orders:
-                addr = o['address'] or 'Unknown'
-                name = addr[:31]
-                ws = sheets.setdefault(
-                    name,
-                    wb.create_sheet(title=name),
+        sheets = {}
+        for o in orders:
+            addr = o["address"] or "Unknown"
+            name = addr[:31]
+            ws = sheets.setdefault(name, wb.create_sheet(title=name))
+            if ws.max_row == 1:
+                ws.append(["Order ID", "Created", "Address", "Cashier", "Item", "Qty", "Price"])
+
+            items = await uow.orders.export_order_items(order_id=uuid.UUID(o["id"]))
+            for it in items:
+                ws.append(
+                    [
+                        o["id"],
+                        o["created"].strftime("%Y-%m-%d %H:%M:%S"),
+                        o["address"],
+                        o["cashier_name"],
+                        it["name"],
+                        it["quantity"],
+                        float(it["price"]),
+                    ]
                 )
-
-                if ws.max_row == 1:
-                    ws.append(
-                        [
-                            'Order ID',
-                            'Created',
-                            'Address',
-                            'Cashier',
-                            'Item',
-                            'Qty',
-                            'Price',
-                        ]
-                    )
-
-                items = await conn.fetch(
-                    """
-                    SELECT oi.quantity, i.name, i.price
-                    FROM orders_items oi
-                    JOIN items i ON i.id = oi.item_id
-                    WHERE oi.order_id = $1
-                    """,
-                    o['id'],
-                )
-
-                for it in items:
-                    ws.append(
-                        [
-                            str(o['id']),
-                            o['created'].strftime('%Y-%m-%d %H:%M:%S'),
-                            o['address'],
-                            o['cashier_name'],
-                            it['name'],
-                            it['quantity'],
-                            float(it['price']),
-                        ]
-                    )
 
         stream = io.BytesIO()
         wb.save(stream)
@@ -189,30 +104,21 @@ class AdminService:
         return stream
 
     @staticmethod
-    async def export_by_address(db, order_for: date):
-        async with db.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT o.address, i.name, oi.quantity
-                FROM orders o
-                JOIN orders_items oi ON o.id = oi.order_id
-                JOIN items i ON oi.item_id = i.id
-                WHERE o.order_for = $1
-                ORDER BY o.address
-                """,
-                order_for,
-            )
+    async def export_by_address(*, uow: AsyncpgUnitOfWork, order_for: date) -> BytesIO:
+        assert uow.orders is not None
+
+        rows = await uow.orders.export_by_address_rows(order_for=order_for)
 
         wb = openpyxl.Workbook()
         wb.remove(wb.active)
 
         grouped = defaultdict(list)
         for r in rows:
-            grouped[r['address']].append((r['name'], r['quantity']))
+            grouped[r["address"]].append((r["name"], r["quantity"]))
 
         for addr, items in grouped.items():
-            ws = wb.create_sheet(title=addr[:31])
-            ws.append(['Item', 'Quantity'])
+            ws = wb.create_sheet(title=(addr or "Unknown")[:31])
+            ws.append(["Item", "Quantity"])
             for n, q in items:
                 ws.append([n, q])
 
@@ -220,14 +126,3 @@ class AdminService:
         wb.save(output)
         output.seek(0)
         return output
-
-
-def parse_toggle_form(self, form):
-    """Парсит active_ чекбоксы"""
-    return [UUID(k[7:]) for k in form.keys() if k.startswith("active_")]
-
-
-async def toggle_items_form(self, db, form):
-    """Toggle из формы"""
-    active_ids = self.parse_toggle_form(form)
-    await self.toggle_items(db, active_ids, active=True)
