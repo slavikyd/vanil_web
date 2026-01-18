@@ -195,3 +195,21 @@ async def export_by_address(
             'Content-Disposition': f'attachment; filename=by_address_{order_for}.xlsx'
         },
     )
+
+
+@router.get("/export/all_items")
+async def export_all_items(
+    request: Request,
+    order_for: date,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    if not await _ensure_admin_or_redirect(request, uow):
+        return RedirectResponse("/", status_code=code.FOUND)
+
+    stream = await AdminService.export_all_items(uow=uow, order_for=order_for)
+
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=all_items_{order_for}.xlsx"},
+    )

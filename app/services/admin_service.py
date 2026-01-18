@@ -45,7 +45,7 @@ class AdminService:
         order_for_date: date | None = None
         if order_for:
             try:
-                order_for_date = datetime.strptime(order_for, "%Y-%m-%d").date()
+                order_for_date = datetime.strptime(order_for, '%Y-%m-%d').date()
             except ValueError:
                 order_for_date = None
 
@@ -53,18 +53,18 @@ class AdminService:
 
         grouped: dict = {}
         for r in rows:
-            d = r["order_for"]
-            oid = r["order_id"]
+            d = r['order_for']
+            oid = r['order_id']
             grouped.setdefault(d, {}).setdefault(
                 oid,
                 {
-                    "id": oid,
-                    "created": r["created"],
-                    "address": r["address"],
-                    "cashier_name": r["cashier_name"],
-                    "items": [],
+                    'id': oid,
+                    'created': r['created'],
+                    'address': r['address'],
+                    'cashier_name': r['cashier_name'],
+                    'items': [],
                 },
-            )["items"].append({"name": r["item_name"], "quantity": r["quantity"]})
+            )['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
 
         return grouped
 
@@ -86,33 +86,33 @@ class AdminService:
 
         sheets = {}
         for o in orders:
-            addr = o["address"] or "Unknown"
+            addr = o['address'] or 'Unknown'
             name = addr[:31]
             ws = sheets.setdefault(name, wb.create_sheet(title=name))
             if ws.max_row == 1:
                 ws.append(
                     [
-                        "Order ID",
-                        "Created",
-                        "Address",
-                        "Cashier",
-                        "Item",
-                        "Qty",
-                        "Price",
+                        'Order ID',
+                        'Created',
+                        'Address',
+                        'Cashier',
+                        'Item',
+                        'Qty',
+                        'Price',
                     ]
                 )
 
-            items = await uow.orders.export_order_items(order_id=uuid.UUID(o["id"]))
+            items = await uow.orders.export_order_items(order_id=uuid.UUID(o['id']))
             for it in items:
                 ws.append(
                     [
-                        o["id"],
-                        o["created"].strftime("%Y-%m-%d %H:%M:%S"),
-                        o["address"],
-                        o["cashier_name"],
-                        it["name"],
-                        it["quantity"],
-                        float(it["price"]),
+                        o['id'],
+                        o['created'].strftime('%Y-%m-%d %H:%M:%S'),
+                        o['address'],
+                        o['cashier_name'],
+                        it['name'],
+                        it['quantity'],
+                        float(it['price']),
                     ]
                 )
 
@@ -132,11 +132,11 @@ class AdminService:
 
         grouped = defaultdict(list)
         for r in rows:
-            grouped[r["address"]].append((r["name"], r["quantity"]))
+            grouped[r['address']].append((r['name'], r['quantity']))
 
         for addr, items in grouped.items():
-            ws = wb.create_sheet(title=(addr or "Unknown")[:31])
-            ws.append(["Item", "Quantity"])
+            ws = wb.create_sheet(title=(addr or 'Unknown')[:31])
+            ws.append(['Item', 'Quantity'])
             for n, q in items:
                 ws.append([n, q])
 
