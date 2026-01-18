@@ -1,4 +1,5 @@
 import uuid
+
 from asyncpg import Connection
 
 
@@ -15,7 +16,10 @@ class ItemsRepo:
             ORDER BY name ASC
             """
         )
-        return [{"id": str(r["id"]), "name": r["name"], "price": float(r["price"])} for r in rows]
+        return [
+            {'id': str(r['id']), 'name': r['name'], 'price': float(r['price'])}
+            for r in rows
+        ]
 
     async def list_for_admin(self) -> list[dict]:
         rows = await self._conn.fetch(
@@ -25,7 +29,10 @@ class ItemsRepo:
             ORDER BY name
             """
         )
-        return [{"id": str(r["id"]), "name": r["name"], "active": bool(r["active"])} for r in rows]
+        return [
+            {'id': str(r['id']), 'name': r['name'], 'active': bool(r['active'])}
+            for r in rows
+        ]
 
     async def create(self, *, name: str, price: float, ttl: int) -> None:
         await self._conn.execute(
@@ -39,7 +46,9 @@ class ItemsRepo:
         )
 
     async def delete(self, *, item_id: uuid.UUID) -> None:
-        await self._conn.execute("DELETE FROM items WHERE id = $1", item_id)
+        await self._conn.execute('DELETE FROM items WHERE id = $1', item_id)
 
     async def set_active(self, *, item_id: uuid.UUID, active: bool) -> None:
-        await self._conn.execute("UPDATE items SET active = $1 WHERE id = $2", active, item_id)
+        await self._conn.execute(
+            'UPDATE items SET active = $1 WHERE id = $2', active, item_id
+        )

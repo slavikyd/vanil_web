@@ -16,7 +16,6 @@ from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.main import app
 from app.routes.deps import get_cart_repo, get_uow
 
-
 os.environ.setdefault("SESSION_SECRET_KEY", "test-secret")
 os.environ.setdefault("DBSCHEMA", "test")
 
@@ -104,7 +103,9 @@ async def client(mock_db_pool, mock_redis):
             app.state.db = pool
 
             # КРИТИЧНО: аннотация Request, иначе FastAPI считает request query-параметром
-            async def override_get_uow(request: Request) -> AsyncIterator[AsyncpgUnitOfWork]:
+            async def override_get_uow(
+                request: Request,
+            ) -> AsyncIterator[AsyncpgUnitOfWork]:
                 async with AsyncpgUnitOfWork(request.app.state.db) as uow:
                     yield uow
 
