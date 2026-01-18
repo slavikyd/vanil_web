@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from asyncpg import Pool
+from app.infrastructure.uow import AsyncpgUnitOfWork
 
 
 class EmptyCartError(Exception):
@@ -12,54 +12,44 @@ class InvalidOrderDateError(Exception):
     pass
 
 
-async def create_order(
-    *,
-    db: Pool,
-    cashier_id: str,
-    shop_id: str,
-    cart: dict[str, int],
-    order_for: str,
-) -> uuid.UUID:
-    if not cart:
-        raise EmptyCartError()
+class OrderService:
+    @staticmethod
+    async def create_order(
+        *,
+        uow: AsyncpgUnitOfWork,
+        cashier_id: str,
+        shop_id: str | None,
+        cart: dict[str, int],
+        order_for: str,
+    ) -> uuid.UUID:
+        if not cart:
+            raise EmptyCartError()
 
-    try:
-        order_for_date = datetime.strptime(order_for, "%Y-%m-%d").date()
-    except ValueError:
-        raise InvalidOrderDateError()
+        try:
+            order_for_date = datetime.strptime(order_for, "%Y-%m-%d").date()
+        except ValueError:
+            raise InvalidOrderDateError()
 
-    order_id = uuid.uuid4()
+        if not shop_id:
+            raise ValueError("Shop id is required")
 
-    async with db.acquire() as conn:
-        async with conn.transaction():
-            shop = await conn.fetchrow(
-                "SELECT address FROM shops WHERE id = $1",
-                shop_id,
-            )
-            if not shop:
+        assert uow.shops is not None
+        assert uow.orders is not None
+
+        order_id = uuid.uuid4()
+
+        async with uow.transaction():
+            address = await uow.shops.get_address(shop_id=shop_id)
+            if not address:
                 raise ValueError("Shop not found")
 
-            await conn.execute(
-                """
-                INSERT INTO orders (id, cashier_id, shop_id, address, order_for)
-                VALUES ($1, $2, $3, $4, $5)
-                """,
-                order_id,
-                cashier_id,
-                shop_id,
-                shop["address"],
-                order_for_date,
+            await uow.orders.create_order(
+                order_id=order_id,
+                cashier_id=cashier_id,
+                shop_id=shop_id,
+                address=address,
+                order_for=order_for_date,
             )
+            await uow.orders.add_items(order_id=order_id, cart=cart)
 
-            for item_id, qty in cart.items():
-                await conn.execute(
-                    """
-                    INSERT INTO orders_items (order_id, item_id, quantity)
-                    VALUES ($1, $2, $3)
-                    """,
-                    order_id,
-                    uuid.UUID(item_id),
-                    qty,
-                )
-
-    return order_id
+        return order_id
