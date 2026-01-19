@@ -6,7 +6,6 @@ import pytest
 from fastapi import Request
 from httpx import AsyncClient
 
-# Совместимый импорт ASGITransport под разные версии httpx
 try:
     from httpx import ASGITransport
 except Exception:
@@ -16,8 +15,8 @@ from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.main import app
 from app.routes.deps import get_cart_repo, get_uow
 
-os.environ.setdefault("SESSION_SECRET_KEY", "test-secret")
-os.environ.setdefault("DBSCHEMA", "test")
+os.environ.setdefault('SESSION_SECRET_KEY', 'test-secret')
+os.environ.setdefault('DBSCHEMA', 'test')
 
 
 class FakeCartRepo:
@@ -26,12 +25,12 @@ class FakeCartRepo:
 
     @staticmethod
     def _key(session_id: str) -> str:
-        return f"cart:{session_id}"
+        return f'cart:{session_id}'
 
     @staticmethod
     def _to_int(v) -> int:
         if isinstance(v, (bytes, bytearray)):
-            return int(v.decode("utf-8"))
+            return int(v.decode('utf-8'))
         return int(v)
 
     async def get_cart(self, *, session_id: str) -> dict[str, int]:
@@ -50,7 +49,7 @@ class FakeCartRepo:
         await self._redis.delete(self._key(session_id))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def event_loop():
     import asyncio
 
@@ -61,8 +60,8 @@ def event_loop():
 
 @pytest.fixture
 def mock_db_pool():
-    pool = AsyncMock(name="mock_pool")
-    conn = AsyncMock(name="mock_conn")
+    pool = AsyncMock(name='mock_pool')
+    conn = AsyncMock(name='mock_conn')
 
     conn.execute = AsyncMock(return_value=None)
     conn.fetch = AsyncMock(return_value=[])
@@ -74,7 +73,6 @@ def mock_db_pool():
     tx_cm.__aexit__ = AsyncMock(return_value=None)
     conn.transaction = MagicMock(return_value=tx_cm)
 
-    # UoW обычно делает await pool.acquire()
     pool.acquire = AsyncMock(return_value=conn)
     pool.release = AsyncMock(return_value=None)
     pool.close = AsyncMock(return_value=None)
@@ -84,7 +82,7 @@ def mock_db_pool():
 
 @pytest.fixture
 def mock_redis():
-    redis = AsyncMock(name="mock_redis")
+    redis = AsyncMock(name='mock_redis')
     redis.hgetall = AsyncMock(return_value={})
     redis.hset = AsyncMock(return_value=1)
     redis.hdel = AsyncMock(return_value=1)
@@ -97,12 +95,10 @@ def mock_redis():
 async def client(mock_db_pool, mock_redis):
     pool, _ = mock_db_pool
 
-    # на случай если где-то в стартапе вызывается connect_db
-    with patch("app.db.connect_db", new=AsyncMock(return_value=pool)):
-        with patch("app.main.connect_db", new=AsyncMock(return_value=pool)):
+    with patch('app.db.connect_db', new=AsyncMock(return_value=pool)):
+        with patch('app.main.connect_db', new=AsyncMock(return_value=pool)):
             app.state.db = pool
 
-            # КРИТИЧНО: аннотация Request, иначе FastAPI считает request query-параметром
             async def override_get_uow(
                 request: Request,
             ) -> AsyncIterator[AsyncpgUnitOfWork]:
@@ -116,7 +112,7 @@ async def client(mock_db_pool, mock_redis):
             app.dependency_overrides[get_cart_repo] = override_get_cart_repo
 
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            async with AsyncClient(transport=transport, base_url='http://test') as ac:
                 yield ac
 
             app.dependency_overrides = {}
