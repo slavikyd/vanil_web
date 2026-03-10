@@ -1,20 +1,20 @@
 ```mermaid
 erDiagram
     shops {
-        text id PK
+        uuid id PK
         text phone_number
         text address
     }
     items {
-        UUID id PK
+        uuid id PK
         text name
-        float price
+        numeric price
         int ttl
         boolean active
     }
     warehouse {
-        UUID id PK
-        UUID item_id FK
+        uuid id PK
+        uuid item_id FK
         int quantity
         boolean is_expired
         timestamp supplied
@@ -26,31 +26,31 @@ erDiagram
         boolean is_admin
     }
     orders {
-        UUID id PK
+        uuid id PK
         timestamp created
-        text shop_id FK
+        uuid shop_id FK
         text cashier_id FK
         text address
         date order_for
     }
     orders_items {
-        UUID order_id FK
-        UUID item_id FK
+        uuid order_id FK
+        uuid item_id FK
         int quantity
+        text name
+        numeric price
     }
     shops_orders {
-        text shop_id FK
-        UUID order_id FK
+        uuid shop_id FK
+        uuid order_id FK
     }
-    
-    shops ||--o{ orders : ""
-    shops ||--o{ shops_orders : ""
-    orders ||--o{ orders_items : ""
-    orders ||--|| cashiers : ""
-    orders ||--|| shops : ""
-    shops_orders }o--|| orders : ""
-    shops_orders }o--|| shops : ""
-    items ||--o{ warehouse : ""
-    items ||--o{ orders_items : ""
+
+    shops ||--o{ orders : "placed at"
+    shops ||--o{ shops_orders : "linked via"
+    cashiers ||--o{ orders : "placed by"
+    orders ||--o{ orders_items : "contains"
+    orders ||--o{ shops_orders : "linked via"
+    items ||--o{ warehouse : "stocked in"
+    items ||--o{ orders_items : "included in"
 
 ```
