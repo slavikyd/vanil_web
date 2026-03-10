@@ -36,8 +36,6 @@ erDiagram
         uuid order_id FK
         uuid item_id FK
         int quantity
-        text name
-        numeric price
     }
     shops_orders {
         uuid shop_id FK
