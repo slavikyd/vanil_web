@@ -30,7 +30,6 @@ erDiagram
         timestamp created
         uuid shop_id FK
         text cashier_id FK
-        text address
         date order_for
     }
     orders_items {
