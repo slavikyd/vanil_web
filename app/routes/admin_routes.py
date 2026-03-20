@@ -28,6 +28,7 @@ async def create_item(
     name: str = Form(...),
     price: float = Form(...),
     ttl: int = Form(...),
+    category_id: str = Form(''),
 ):
     """Item entity creation endpoint
 
@@ -44,7 +45,14 @@ async def create_item(
     if not await _ensure_admin_or_redirect(request, uow):
         return RedirectResponse('/', status_code=code.FOUND)
 
-    await AdminService.create_item(uow=uow, name=name, price=price, ttl=ttl)
+    parsed_category_id = uuid.UUID(category_id) if category_id else None
+    await AdminService.create_item(
+        uow=uow,
+        name=name,
+        price=price,
+        ttl=ttl,
+        category_id=parsed_category_id,
+    )
     return RedirectResponse('/admin/items', status_code=code.FOUND)
 
 
@@ -89,8 +97,10 @@ async def admin_items(
         return RedirectResponse('/', status_code=code.FOUND)
 
     items = await AdminService.list_items(uow=uow)
+    categories = await AdminService.list_categories(uow=uow)
     return templates.TemplateResponse(
-        'admin_items.html', {'request': request, 'items': items}
+        'admin_items.html',
+        {'request': request, 'items': items, 'categories': categories},
     )
 
 
@@ -115,8 +125,44 @@ async def toggle_items(
         uuid.UUID(i['id']): bool(active_ids.get(uuid.UUID(i['id']), False))
         for i in all_items
     }
+    category_map: dict[uuid.UUID, uuid.UUID | None] = {}
+    for i in all_items:
+        item_uuid = uuid.UUID(i['id'])
+        raw_category_id = form.get(f'category_{i["id"]}')
+        category_map[item_uuid] = uuid.UUID(raw_category_id) if raw_category_id else None
 
-    await AdminService.toggle_items(uow=uow, active_map=active_map)
+    await AdminService.toggle_items(
+        uow=uow, active_map=active_map, category_map=category_map
+    )
+    return RedirectResponse('/admin/items', status_code=code.FOUND)
+
+
+@router.post('/categories/create')
+async def create_category(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+    name: str = Form(...),
+):
+    if not await _ensure_admin_or_redirect(request, uow):
+        return RedirectResponse('/', status_code=code.FOUND)
+
+    await AdminService.create_category(uow=uow, name=name)
+    return RedirectResponse('/admin/items', status_code=code.FOUND)
+
+
+@router.post('/categories/update')
+async def update_category(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+    category_id: str = Form(...),
+    name: str = Form(...),
+):
+    if not await _ensure_admin_or_redirect(request, uow):
+        return RedirectResponse('/', status_code=code.FOUND)
+
+    await AdminService.rename_category(
+        uow=uow, category_id=uuid.UUID(category_id), name=name
+    )
     return RedirectResponse('/admin/items', status_code=code.FOUND)
 
 

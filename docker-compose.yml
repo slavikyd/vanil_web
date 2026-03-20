@@ -13,14 +13,14 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
-  rabbitmq:
-    image: rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+  # rabbitmq:
+  #   image: rabbitmq
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"
+  #   environment:
+  #     RABBITMQ_DEFAULT_USER: guest
+  #     RABBITMQ_DEFAULT_PASS: guest
 
   web:
     build: .
@@ -31,7 +31,7 @@ services:
       - .:/code
     depends_on:
       - db
-      - rabbitmq
+      # - rabbitmq
     env_file:
       - .env
 

@@ -13,10 +13,17 @@ from app.infrastructure.uow import AsyncpgUnitOfWork
 class AdminService:
     @staticmethod
     async def create_item(
-        *, uow: AsyncpgUnitOfWork, name: str, price: float, ttl: int
+        *,
+        uow: AsyncpgUnitOfWork,
+        name: str,
+        price: float,
+        ttl: int,
+        category_id: uuid.UUID | None,
     ) -> None:
         assert uow.items is not None
-        await uow.items.create(name=name, price=price, ttl=ttl)
+        await uow.items.create(
+            name=name, price=price, ttl=ttl, category_id=category_id
+        )
 
     @staticmethod
     async def delete_item(*, uow: AsyncpgUnitOfWork, item_id: uuid.UUID) -> None:
@@ -30,11 +37,35 @@ class AdminService:
 
     @staticmethod
     async def toggle_items(
-        *, uow: AsyncpgUnitOfWork, active_map: dict[uuid.UUID, bool]
+        *,
+        uow: AsyncpgUnitOfWork,
+        active_map: dict[uuid.UUID, bool],
+        category_map: dict[uuid.UUID, uuid.UUID | None],
     ) -> None:
         assert uow.items is not None
         for item_id, is_active in active_map.items():
-            await uow.items.set_active(item_id=item_id, active=is_active)
+            await uow.items.update_admin_fields(
+                item_id=item_id,
+                active=is_active,
+                category_id=category_map.get(item_id),
+            )
+
+    @staticmethod
+    async def list_categories(*, uow: AsyncpgUnitOfWork) -> list[dict]:
+        assert uow.items is not None
+        return await uow.items.list_categories()
+
+    @staticmethod
+    async def create_category(*, uow: AsyncpgUnitOfWork, name: str) -> None:
+        assert uow.items is not None
+        await uow.items.create_category(name=name)
+
+    @staticmethod
+    async def rename_category(
+        *, uow: AsyncpgUnitOfWork, category_id: uuid.UUID, name: str
+    ) -> None:
+        assert uow.items is not None
+        await uow.items.rename_category(category_id=category_id, name=name)
 
     @staticmethod
     async def get_orders(
