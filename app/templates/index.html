@@ -37,11 +37,13 @@
                 }
             }
 
+            // If Telegram is already present (inside Telegram app), use it immediately.
             if (window.Telegram?.WebApp) {
                 initTelegramWebApp();
                 return;
             }
 
+            // Load Telegram SDK asynchronously so page render is never blocked.
             const tgScript = document.createElement('script');
             tgScript.src = 'https://telegram.org/js/telegram-web-app.js';
             tgScript.async = true;
@@ -66,7 +68,9 @@
         <h1 style="text-align: center;">Заказ</h1>
 
         <div class="page-container">
+            <!-- Форма открывается здесь, чтобы поля даты и магазина оказались наверху -->
             <form id="orderForm" action="/place_order" method="post" style="text-align: center; margin-top: 2em;">
+                <!-- Поля даты и магазина перенесены в начало контейнера, без изменений стилей -->
                 <label for="order_for">Дата доставки:</label><br>
                 <input type="date" id="order_for" name="order_for" required>
                 <br><br>
@@ -75,6 +79,7 @@
                 <div id="dateError" style="color: red; margin-top: 0.5em;"></div>
                 <br>
 
+                <!-- Весь остальной контент (категории, корзина, кнопка) остаётся внутри формы -->
                 <div class="grid">
                     {% for category in grouped_items %}
                     <details style="margin-bottom: 12px; border: 1px solid #eee; border-radius: 6px; padding: 8px;">
@@ -95,8 +100,8 @@
                     {% endfor %}
                 </div>
 
-                <!-- FIX: removed dots -->
-                <ul class="items-list" style="list-style: none; padding-left: 0; margin: 0;">
+                <!-- SERVER-SIDE FALLBACK -->
+                <ul class="items-list" style="padding-left: 0;">
                     {% if cart %}
                         {% for item_id, qty in cart.items() %}
                             {% if qty > 0 %}
@@ -113,7 +118,7 @@
                     <button type="submit">Создать заявку</button>
                 </div>
             </form>
-
+            <!-- Форма закрыта, навигация и админ-ссылки остаются снаружи (как в исходном коде) -->
             <div style="display: flex; justify-content: space-between; margin-top: 1em;">
                 <a href="/orders">Посмотреть заявки</a>
                 <form action="/logout" method="post">
@@ -130,7 +135,7 @@
         </div>
 
 
-<script>
+        <script>
 document.addEventListener('DOMContentLoaded', () => {
     const selectors = document.querySelectorAll('.quantity-selector');
     const orderList = document.querySelector('.items-list');
@@ -150,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const json = await resp.json();
             renderOrder(json.cart, json.items_data);
 
+            // Синхронизируем input в карточке
             const input = document.getElementById(`quantity-${itemId}`);
             if (input) input.value = qty;
         }
@@ -167,21 +173,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!item) continue;
 
                 const li = document.createElement('li');
-                li.className = 'cart-item';
-
-                // FIX: stable layout + correct format
-                li.style.display = 'flex';
-                li.style.justifyContent = 'space-between';
-                li.style.alignItems = 'center';
-
+                li.className = 'cart-item';  // Для event delegation
+                li.dataset.itemId = id;
+                li.dataset.itemQty = qty;
                 li.innerHTML = `
-                    <span style="flex: 1;">${item.name} - <b>${qty}</b></span>
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <button type="button" class="cart-minus">-</button>
-                        <button type="button" class="cart-plus">+</button>
-                        <button type="button" class="cart-delete" style="background:#dc3545;color:#fff;border:none;padding:4px 10px;border-radius:4px;">
-                            Удалить
-                        </button>
+                    <span style="flex: 1;">${item.name}</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button type="button" class="cart-minus" style="width: 30px; height: 30px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">-</button>
+                        <span style="min-width: 40px; text-align: center; font-weight: bold;">${qty}</span>
+                        <button type="button" class="cart-plus" style="width: 30px; height: 30px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">+</button>
+                        <button class="cart-delete" style="background: #dc3545; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Удалить</button>
                     </div>
                 `;
                 orderList.appendChild(li);
@@ -192,17 +193,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // EVENT DELEGATION для корзины (ловим клики на динамически созданные кнопки)
     orderList.addEventListener('click', (e) => {
         const li = e.target.closest('.cart-item');
         if (!li) return;
 
-        const id = li.querySelector('.cart-minus')?.dataset?.itemId || 
-                   li.querySelector('.cart-plus')?.dataset?.itemId ||
-                   li.querySelector('.cart-delete')?.dataset?.itemId;
-
-        const item = Array.from(orderList.children).find(el => el === li);
-        const text = li.querySelector('span').innerText;
-        const qty = parseInt(text.match(/\d+/));
+        const id = li.dataset.itemId;
+        const qty = parseInt(li.dataset.itemQty);
 
         if (e.target.classList.contains('cart-minus')) {
             sendUpdate(id, qty - 1);
@@ -213,6 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // +/- в карточках товаров (статичные)
     selectors.forEach(s => {
         const input = s.querySelector('input');
         const id = input.dataset.itemId;
@@ -232,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         input.onchange = () => sendUpdate(id, parseInt(input.value) || 0);
     });
 
+    // Инициализация
     try {
         renderOrder(JSON.parse('{{ cart|tojson }}'), JSON.parse('{{ items|tojson }}'));
     } catch (e) {
