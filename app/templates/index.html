@@ -54,7 +54,6 @@
         })();
     </script>
 
-
     {% if not cashier_id %}
         <h2 style="text-align: center;">Введите ID кассира для входа</h2>
         {% if error %}
@@ -68,6 +67,23 @@
         <h1 style="text-align: center;">Заказ</h1>
 
         <div class="page-container">
+            <!-- ========== ДАТА И МАГАЗИН ПЕРЕНЕСЕНЫ НАВЕРХ ========== -->
+            <form id="orderForm" action="/place_order" method="post" style="margin-bottom: 1.5rem; background: #f9f9f9; padding: 1rem; border-radius: 12px;">
+                <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-end;">
+                    <div>
+                        <label for="order_for" style="font-weight: 500;">📅 Дата доставки:</label><br>
+                        <input type="date" id="order_for" name="order_for" required style="padding: 0.5rem; border-radius: 8px; border: 1px solid #ccc;">
+                    </div>
+                    <div>
+                        <label for="store_name" style="font-weight: 500;">🏪 Магазин (временно):</label><br>
+                        <input type="text" id="store_name" name="store_name" placeholder="Например, Магазин на Ленина" style="padding: 0.5rem; border-radius: 8px; border: 1px solid #ccc; min-width: 200px;">
+                    </div>
+                    <div id="dateError" style="color: red; font-size: 0.9rem;"></div>
+                </div>
+                <!-- Форма остаётся открытой, кнопка отправки будет внизу после корзины -->
+            </form>
+
+            <!-- Категории товаров -->
             <div class="grid">
                 {% for category in grouped_items %}
                 <details style="margin-bottom: 12px; border: 1px solid #eee; border-radius: 6px; padding: 8px;">
@@ -88,8 +104,8 @@
                 {% endfor %}
             </div>
 
-            <!-- SERVER-SIDE FALLBACK -->
-            <ul class="items-list" style="padding-left: 0;">
+            <!-- Динамическая корзина (отображается JS) -->
+            <ul class="items-list" style="padding-left: 0; margin-top: 1rem;">
                 {% if cart %}
                     {% for item_id, qty in cart.items() %}
                         {% if qty > 0 %}
@@ -101,35 +117,31 @@
                 {% endif %}
             </ul>
 
-            <div>
+            <div style="margin-top: 1rem;">
                 <hr>
-                <form id="orderForm" action="/place_order" method="post" style="text-align: center; margin-top: 2em;">
-                    <label for="order_for">Дата доставки:</label><br>
-                    <input type="date" id="order_for" name="order_for" required>
-                    <br><br>
-                    <label for="store_name">Магазин (временно):</label><br>
-                    <input type="text" id="store_name" name="store_name" placeholder="Например, Магазин на Ленина">
-                    <div id="dateError" style="color: red; margin-top: 0.5em;"></div>
-                    <br>
-                    <button type="submit">Создать заявку</button>
+                <!-- Кнопка отправки ЗДЕСЬ, внутри той же формы (orderForm) -->
+                <div style="text-align: center; margin: 1.5rem 0 1rem;">
+                    <button type="submit" form="orderForm" style="background-color: #28a745; color: white; border: none; padding: 10px 24px; border-radius: 30px; font-size: 1rem; font-weight: bold; cursor: pointer;">✅ Создать заявку</button>
+                </div>
+                <!-- Закрываем форму, чтобы ссылки оказались снаружи -->
                 </form>
 
+                <!-- Навигационные ссылки (вне формы) -->
                 <div style="display: flex; justify-content: space-between; margin-top: 1em;">
-                    <a href="/orders">Посмотреть заявки</a>
+                    <a href="/orders">📋 Посмотреть заявки</a>
                     <form action="/logout" method="post">
-                        <button type="submit">Выйти</button>
+                        <button type="submit">🚪 Выйти</button>
                     </form>
                 </div>
 
                 {% if is_admin %}
-                    <div style="margin-top: 3em; text-align: center;">
-                        <a href="/admin/orders">Админ: Все заявки</a>
-                        <a href="/admin/items">Админ: Товары</a>
+                    <div style="margin-top: 2em; text-align: center; display: flex; gap: 1.5rem; justify-content: center;">
+                        <a href="/admin/orders">🔐 Админ: Все заявки</a>
+                        <a href="/admin/items">🛠️ Админ: Товары</a>
                     </div>
                 {% endif %}
             </div>
         </div>
-
 
         <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -151,13 +163,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const json = await resp.json();
             renderOrder(json.cart, json.items_data);
 
-            // Синхронизируем input в карточке
+            // Синхронизируем input в карточке товара
             const input = document.getElementById(`quantity-${itemId}`);
             if (input) input.value = qty;
         }
     };
 
     function renderOrder(cart, items) {
+        if (!orderList) return;
         orderList.innerHTML = '';
         let hasItems = false;
 
@@ -169,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!item) continue;
 
                 const li = document.createElement('li');
-                li.className = 'cart-item';  // Для event delegation
+                li.className = 'cart-item';
                 li.dataset.itemId = id;
                 li.dataset.itemQty = qty;
                 li.innerHTML = `
@@ -185,48 +198,93 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         if (!hasItems) {
-            orderList.innerHTML = '<li style="text-align: center; color: #999;">Корзина пуста</li>';
+            orderList.innerHTML = '<li style="text-align: center; color: #999;">🛒 Корзина пуста</li>';
         }
     }
 
-    // EVENT DELEGATION для корзины (ловим клики на динамически созданные кнопки)
-    orderList.addEventListener('click', (e) => {
-        const li = e.target.closest('.cart-item');
-        if (!li) return;
+    // Делегирование событий для кнопок корзины
+    if (orderList) {
+        orderList.addEventListener('click', (e) => {
+            const li = e.target.closest('.cart-item');
+            if (!li) return;
 
-        const id = li.dataset.itemId;
-        const qty = parseInt(li.dataset.itemQty);
+            const id = li.dataset.itemId;
+            const qty = parseInt(li.dataset.itemQty);
 
-        if (e.target.classList.contains('cart-minus')) {
-            sendUpdate(id, qty - 1);
-        } else if (e.target.classList.contains('cart-plus')) {
-            sendUpdate(id, qty + 1);
-        } else if (e.target.classList.contains('cart-delete')) {
-            sendUpdate(id, 0);
-        }
-    });
+            if (e.target.classList.contains('cart-minus')) {
+                sendUpdate(id, qty - 1);
+            } else if (e.target.classList.contains('cart-plus')) {
+                sendUpdate(id, qty + 1);
+            } else if (e.target.classList.contains('cart-delete')) {
+                sendUpdate(id, 0);
+            }
+        });
+    }
 
-    // +/- в карточках товаров (статичные)
+    // Обработчики +/- в карточках товаров (статические)
     selectors.forEach(s => {
         const input = s.querySelector('input');
         const id = input.dataset.itemId;
 
-        s.querySelector('.quantity-plus').onclick = () => {
-            const newQty = parseInt(input.value) + 1;
-            input.value = newQty;
-            sendUpdate(id, newQty);
-        };
+        const plusBtn = s.querySelector('.quantity-plus');
+        const minusBtn = s.querySelector('.quantity-minus');
 
-        s.querySelector('.quantity-minus').onclick = () => {
-            const newQty = Math.max(0, parseInt(input.value) - 1);
-            input.value = newQty;
-            sendUpdate(id, newQty);
-        };
-
-        input.onchange = () => sendUpdate(id, parseInt(input.value) || 0);
+        if (plusBtn) {
+            plusBtn.onclick = () => {
+                const newQty = parseInt(input.value) + 1;
+                input.value = newQty;
+                sendUpdate(id, newQty);
+            };
+        }
+        if (minusBtn) {
+            minusBtn.onclick = () => {
+                const newQty = Math.max(0, parseInt(input.value) - 1);
+                input.value = newQty;
+                sendUpdate(id, newQty);
+            };
+        }
+        if (input) {
+            input.onchange = () => sendUpdate(id, parseInt(input.value) || 0);
+        }
     });
 
-    // Инициализация
+    // Простейшая валидация даты (не прошлая, не пустая)
+    const dateInput = document.getElementById('order_for');
+    const dateErrorDiv = document.getElementById('dateError');
+    if (dateInput && dateErrorDiv) {
+        dateInput.addEventListener('change', () => {
+            const selected = dateInput.value;
+            if (!selected) {
+                dateErrorDiv.textContent = 'Пожалуйста, выберите дату доставки';
+                return;
+            }
+            const today = new Date().toISOString().split('T')[0];
+            if (selected < today) {
+                dateErrorDiv.textContent = 'Дата не может быть в прошлом';
+            } else {
+                dateErrorDiv.textContent = '';
+            }
+        });
+        // Принудительная проверка перед отправкой формы
+        const orderForm = document.getElementById('orderForm');
+        if (orderForm) {
+            orderForm.addEventListener('submit', (e) => {
+                if (!dateInput.value) {
+                    dateErrorDiv.textContent = 'Укажите дату доставки';
+                    e.preventDefault();
+                    return false;
+                }
+                if (dateInput.value < new Date().toISOString().split('T')[0]) {
+                    dateErrorDiv.textContent = 'Дата не может быть в прошлом';
+                    e.preventDefault();
+                    return false;
+                }
+                return true;
+            });
+        }
+    }
+
+    // Инициализация корзины
     try {
         renderOrder(JSON.parse('{{ cart|tojson }}'), JSON.parse('{{ items|tojson }}'));
     } catch (e) {
@@ -234,7 +292,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 </script>
-
     {% endif %}
 </body>
 </html>
