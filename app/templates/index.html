@@ -105,7 +105,7 @@
                     {% if cart %}
                         {% for item_id, qty in cart.items() %}
                             {% if qty > 0 %}
-                                <li>Товар {{ item_id }} — Количество: {{ qty }}</li>
+                                Товар {{ item_id }} — {{ qty }} шт.
                             {% endif %}
                         {% endfor %}
                     {% else %}
