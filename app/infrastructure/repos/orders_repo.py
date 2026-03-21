@@ -179,3 +179,37 @@ class OrdersRepo:
             {'address': r['address'], 'name': r['name'], 'quantity': r['quantity']}
             for r in rows
         ]
+
+    async def admin_rows_live(self) -> list[dict]:
+        rows = await self._conn.fetch(
+            """
+            SELECT
+              o.id AS order_id,
+              o.order_for,
+              o.created,
+              o.shop_id,
+              o.address,
+              c.full_name AS cashier_name,
+              oi.quantity,
+              i.name AS item_name
+            FROM orders o
+            JOIN cashiers c ON o.cashier_id = c.id
+            JOIN orders_items oi ON oi.order_id = o.id
+            JOIN items i ON oi.item_id = i.id
+            ORDER BY o.order_for DESC, o.created DESC, o.id
+            """
+        )
+
+        return [
+            {
+                'order_id': str(r['order_id']),
+                'order_for': r['order_for'],
+                'created': r['created'],
+                'shop_id': r['shop_id'],
+                'address': r['address'],
+                'cashier_name': r['cashier_name'],
+                'item_name': r['item_name'],
+                'quantity': r['quantity'],
+            }
+            for r in rows
+        ]

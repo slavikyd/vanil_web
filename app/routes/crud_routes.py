@@ -64,6 +64,7 @@ async def place_order(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
     order_for: str = Form(...),
+    store_name: str | None = Form(None),
     tg_id: str | None = Form(None),
 ):
     session = request.session
@@ -76,10 +77,8 @@ async def place_order(
     if not session_id:
         return HTMLResponse('Invalid session', status_code=code.BAD_REQUEST)
 
-    if tg_id:
-        session['tg_id'] = tg_id
-
-    shop_id = session.get('tg_id')
+    # Temporarily decouple order creation from Telegram shop id.
+    shop_id = None
 
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
 
@@ -90,6 +89,7 @@ async def place_order(
             shop_id=shop_id,
             cart=cart,
             order_for=order_for,
+            store_name=store_name,
         )
     except EmptyCartError:
         return HTMLResponse('Cart is empty', status_code=code.BAD_REQUEST)

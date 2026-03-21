@@ -88,6 +88,9 @@
                 <form id="orderForm" action="/place_order" method="post" style="text-align: center; margin-top: 2em;">
                     <label for="order_for">Дата доставки:</label><br>
                     <input type="date" id="order_for" name="order_for" required>
+                    <br><br>
+                    <label for="store_name">Магазин (временно):</label><br>
+                    <input type="text" id="store_name" name="store_name" placeholder="Например, Магазин на Ленина">
                     <div id="dateError" style="color: red; margin-top: 0.5em;"></div>
                     <br>
                     <button type="submit">Создать заявку</button>

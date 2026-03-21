@@ -12,6 +12,87 @@ from app.infrastructure.uow import AsyncpgUnitOfWork
 
 class AdminService:
     @staticmethod
+    def _build_live_orders_payload(rows: list[dict]) -> dict:
+        today = date.today()
+        days_map: dict[date, dict] = {}
+
+        for r in rows:
+            day = r['order_for']
+            day_block = days_map.setdefault(
+                day,
+                {
+                    'date': day.isoformat(),
+                    'is_today': day == today,
+                    'total_orders': 0,
+                    'totals_map': defaultdict(int),
+                    'orders_map': {},
+                    'shops_map': {},
+                },
+            )
+
+            oid = r['order_id']
+            order_block = day_block['orders_map'].setdefault(
+                oid,
+                {
+                    'id': oid,
+                    'created': r['created'],
+                    'created_hhmm': r['created'].strftime('%H:%M:%S'),
+                    'address': r['address'],
+                    'cashier_name': r['cashier_name'],
+                    'shop_id': r['shop_id'],
+                    'items': [],
+                },
+            )
+            order_block['items'].append(
+                {'name': r['item_name'], 'quantity': int(r['quantity'])}
+            )
+
+            shop_key = r['address'] or (r['shop_id'] or 'Unknown shop')
+            shop_block = day_block['shops_map'].setdefault(
+                shop_key, {'shop': shop_key, 'orders': {}}
+            )
+            shop_block['orders'][oid] = order_block
+
+            day_block['totals_map'][r['item_name']] += int(r['quantity'])
+
+        days: list[dict] = []
+        for day in sorted(days_map.keys(), reverse=True):
+            block = days_map[day]
+            orders_sorted = sorted(
+                block['orders_map'].values(), key=lambda x: x['created'], reverse=True
+            )
+            block['total_orders'] = len(orders_sorted)
+
+            totals = [
+                {'name': name, 'quantity': qty}
+                for name, qty in sorted(block['totals_map'].items())
+            ]
+
+            shops = []
+            for shop_name, shop_data in sorted(block['shops_map'].items()):
+                shop_orders = sorted(
+                    shop_data['orders'].values(),
+                    key=lambda x: x['created'],
+                    reverse=True,
+                )
+                shops.append({'shop': shop_name, 'orders': shop_orders})
+
+            for o in orders_sorted:
+                o['created'] = o['created'].isoformat()
+
+            days.append(
+                {
+                    'date': block['date'],
+                    'is_today': block['is_today'],
+                    'total_orders': block['total_orders'],
+                    'totals': totals,
+                    'shops': shops,
+                }
+            )
+
+        return {'days': days, 'generated_at': datetime.utcnow().isoformat()}
+
+    @staticmethod
     async def create_item(
         *,
         uow: AsyncpgUnitOfWork,
@@ -200,3 +281,9 @@ class AdminService:
         wb.save(output)
         output.seek(0)
         return output
+
+    @staticmethod
+    async def get_live_orders_payload(*, uow: AsyncpgUnitOfWork) -> dict:
+        assert uow.orders is not None
+        rows = await uow.orders.admin_rows_live()
+        return AdminService._build_live_orders_payload(rows)

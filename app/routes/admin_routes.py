@@ -4,7 +4,7 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 import app.http_codes as code
 from app.infrastructure.uow import AsyncpgUnitOfWork
@@ -190,6 +190,35 @@ async def admin_orders(
             'address': address,
         },
     )
+
+
+@router.get('/orders/live', response_class=HTMLResponse)
+async def admin_orders_live(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    if not await _ensure_admin_or_redirect(request, uow):
+        return RedirectResponse('/', status_code=code.FOUND)
+
+    payload = await AdminService.get_live_orders_payload(uow=uow)
+    return templates.TemplateResponse(
+        'admin_orders_live.html',
+        {
+            'request': request,
+            'initial_data': payload,
+        },
+    )
+
+
+@router.get('/orders/live/data', response_class=JSONResponse)
+async def admin_orders_live_data(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    if not await _ensure_admin_or_redirect(request, uow):
+        return JSONResponse({'error': 'forbidden'}, status_code=403)
+    payload = await AdminService.get_live_orders_payload(uow=uow)
+    return JSONResponse(payload)
 
 
 @router.post('/orders/delete')
