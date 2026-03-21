@@ -12,7 +12,7 @@ from app.infrastructure.uow import AsyncpgUnitOfWork
 
 class AdminService:
     @staticmethod
-    def _build_live_orders_payload(rows: list[dict]) -> dict:
+    def _build_live_orders_payload(rows: list[dict], all_item_names: list[str]) -> dict:
         today = date.today()
         days_map: dict[date, dict] = {}
 
@@ -24,7 +24,7 @@ class AdminService:
                     'date': day.isoformat(),
                     'is_today': day == today,
                     'total_orders': 0,
-                    'totals_map': defaultdict(int),
+                    'totals_map': defaultdict(int, {name: 0 for name in all_item_names}),
                     'orders_map': {},
                     'shops_map': {},
                 },
@@ -285,5 +285,36 @@ class AdminService:
     @staticmethod
     async def get_live_orders_payload(*, uow: AsyncpgUnitOfWork) -> dict:
         assert uow.orders is not None
+        assert uow.items is not None
         rows = await uow.orders.admin_rows_live()
-        return AdminService._build_live_orders_payload(rows)
+        all_items = await uow.items.list_for_admin()
+        all_item_names = sorted({str(i['name']) for i in all_items})
+        return AdminService._build_live_orders_payload(rows, all_item_names)
+
+    @staticmethod
+    async def export_live_totals(*, uow: AsyncpgUnitOfWork, order_for: date) -> BytesIO:
+        assert uow.orders is not None
+        assert uow.items is not None
+
+        all_items = await uow.items.list_for_admin()
+        all_item_names = sorted({str(i['name']) for i in all_items})
+        rows = await uow.orders.admin_rows(order_for=order_for, address=None)
+
+        totals: dict[str, int] = {name: 0 for name in all_item_names}
+        for r in rows:
+            name = str(r['item_name'])
+            qty = int(r['quantity'])
+            totals[name] = totals.get(name, 0) + qty
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = f"Totals {order_for}"
+        ws.append(["Item", "Ordered quantity"])
+
+        for name in sorted(totals.keys()):
+            ws.append([name, totals[name]])
+
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return output

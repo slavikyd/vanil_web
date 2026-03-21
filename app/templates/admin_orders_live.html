@@ -21,6 +21,12 @@
         .mode-btn.active { background: #111827; color: #fff; border-color: #111827; }
         .mode { padding: 10px 12px; }
         .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #eee; }
+        .excel-table { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; }
+        .excel-table th, .excel-table td { border: 1px solid #d1d5db; padding: 6px 8px; }
+        .excel-table th { background: #f3f4f6; text-align: left; }
+        .excel-table td:last-child { text-align: right; font-weight: 600; }
+        .day-tools { padding: 0 12px 8px; }
+        .excel-link { display: inline-block; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #111827; background: #fff; font-size: 13px; }
         .shop { border: 1px solid #eee; border-radius: 6px; margin-bottom: 8px; overflow: hidden; }
         .shop summary { padding: 8px 10px; cursor: pointer; background: #fcfcfc; }
         .order { border-top: 1px solid #f0f0f0; padding: 8px 10px; }
@@ -54,7 +60,25 @@
 
         function renderTotals(day) {
             if (!day.totals.length) return '<div class="muted">Нет позиций</div>';
-            return day.totals.map(t => `<div class="row"><span>${t.name}</span><strong>${t.quantity} шт.</strong></div>`).join('');
+            const rows = day.totals.map(t => `
+                <tr>
+                    <td>${t.name}</td>
+                    <td>${t.quantity}</td>
+                </tr>
+            `).join('');
+            return `
+                <table class="excel-table">
+                    <thead>
+                        <tr>
+                            <th>Позиция</th>
+                            <th>Заказано</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            `;
         }
 
         function renderShops(day) {
@@ -96,6 +120,9 @@
                     <div class="mode-buttons">
                         <button class="mode-btn active" data-mode="totals" data-day="${day.date}">Все позиции</button>
                         <button class="mode-btn" data-mode="shops" data-day="${day.date}">По магазинам</button>
+                    </div>
+                    <div class="day-tools">
+                        <a class="excel-link" href="/admin/orders/live/export/totals?order_for=${day.date}">Экспорт totals в Excel</a>
                     </div>
                     <div class="mode" id="totals-${day.date}">${renderTotals(day)}</div>
                     <div class="mode" id="shops-${day.date}" style="display:none;">${renderShops(day)}</div>

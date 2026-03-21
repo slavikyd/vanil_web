@@ -221,6 +221,24 @@ async def admin_orders_live_data(
     return JSONResponse(payload)
 
 
+@router.get('/orders/live/export/totals')
+async def export_live_totals(
+    request: Request,
+    order_for: date,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    if not await _ensure_admin_or_redirect(request, uow):
+        return RedirectResponse('/', status_code=code.FOUND)
+    stream = await AdminService.export_live_totals(uow=uow, order_for=order_for)
+    return StreamingResponse(
+        stream,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={
+            'Content-Disposition': f'attachment; filename=live_totals_{order_for}.xlsx'
+        },
+    )
+
+
 @router.post('/orders/delete')
 async def delete_order(
     request: Request,

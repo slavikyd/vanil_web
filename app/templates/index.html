@@ -8,32 +8,50 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body style="font-family: Arial, Helvetica, sans-serif;">
-    <!-- Telegram WebApp init -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Telegram WebApp init (non-blocking) -->
     <script>
-        // Telegram WebApp (optional)
-        try {
-            const tg = window.Telegram?.WebApp;
-            if (tg) {
-                tg.ready();
-                const userId = tg.initDataUnsafe?.user?.id;
-                if (userId) {
-                    window.addEventListener('DOMContentLoaded', () => {
-                        document.querySelectorAll('form').forEach(form => {
-                            if (!form.querySelector('input[name="tg_id"]')) {
-                                const input = document.createElement('input');
-                                input.type = 'hidden';
-                                input.name = 'tg_id';
-                                input.value = userId;
-                                form.appendChild(input);
-                            }
-                        });
+        (() => {
+            function applyTgIdToForms(userId) {
+                if (!userId) return;
+                window.addEventListener('DOMContentLoaded', () => {
+                    document.querySelectorAll('form').forEach(form => {
+                        if (!form.querySelector('input[name="tg_id"]')) {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = 'tg_id';
+                            input.value = userId;
+                            form.appendChild(input);
+                        }
                     });
+                });
+            }
+
+            function initTelegramWebApp() {
+                try {
+                    const tg = window.Telegram?.WebApp;
+                    if (!tg) return;
+                    tg.ready();
+                    applyTgIdToForms(tg.initDataUnsafe?.user?.id);
+                } catch (e) {
+                    console.warn('Telegram WebApp not available');
                 }
             }
-        } catch (e) {
-            console.warn('Telegram WebApp not available');
-        }
+
+            // If Telegram is already present (inside Telegram app), use it immediately.
+            if (window.Telegram?.WebApp) {
+                initTelegramWebApp();
+                return;
+            }
+
+            // Load Telegram SDK asynchronously so page render is never blocked.
+            const tgScript = document.createElement('script');
+            tgScript.src = 'https://telegram.org/js/telegram-web-app.js';
+            tgScript.async = true;
+            tgScript.defer = true;
+            tgScript.onload = initTelegramWebApp;
+            tgScript.onerror = () => console.warn('Telegram SDK failed to load');
+            document.head.appendChild(tgScript);
+        })();
     </script>
 
 
