@@ -174,12 +174,59 @@ async def orders_archive_view(
         order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
 
     today_key = date.today().isoformat()
-    archive_orders = {k: v for k, v in grouped.items() if k != today_key}
+    # Keep only orders from yesterday and older (dates less than today)
+    past_orders = {
+        k: v for k, v in grouped.items() 
+        if k < today_key  # This will keep all dates before today
+    }
 
     return templates.TemplateResponse(
         'orders_archive.html',
         {
             'request': request,
-            'archive_orders': archive_orders,
+            'archive_orders': past_orders,  # Now contains only past orders
+        },
+    )
+
+@router.get('/orders/future', response_class=HTMLResponse)
+async def orders_future_view(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    cashier_id = request.session.get('cashier_id')
+    if not cashier_id:
+        return RedirectResponse('/', status_code=code.FOUND)
+
+    assert uow.orders is not None
+    rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
+
+    grouped: dict[str, list[dict]] = {}
+    for r in rows:
+        oid = r['order_id']
+        day_key = r['order_for'].isoformat()
+        day_bucket = grouped.setdefault(day_key, [])
+        order = next((o for o in day_bucket if o['id'] == oid), None)
+        if order is None:
+            order = {
+                'id': oid,
+                'created': r['created'],
+                'address': r['address'],
+                'items': [],
+            }
+            day_bucket.append(order)
+        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
+
+    today_key = date.today().isoformat()
+    # Keep only orders from tomorrow and future (tomorrow and newer)
+    future_orders = {
+        k: v for k, v in grouped.items() 
+        if k > today_key  # This will keep all dates after today
+    }
+
+    return templates.TemplateResponse(
+        'orders_future.html',
+        {
+            'request': request,
+            'future_orders': future_orders,
         },
     )
