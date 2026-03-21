@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        body { font-family: Arial, Helvetica, sans-serif; background: #f6f7fb; margin: 0; padding: 12px; }
+        body { font-family: Arial, Helvetica, sans-serif; background: #f6f7fb; margin: 0; padding: 12px; overflow: hidden; }
         .container { max-width: 980px; margin: 0 auto; }
         .top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
         .actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -27,6 +27,8 @@
         .excel-table td:last-child { text-align: right; font-weight: 600; }
         .day-tools { padding: 0 12px 8px; }
         .excel-link { display: inline-block; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #111827; background: #fff; font-size: 13px; }
+        .fit-wrap { width: 100%; overflow: hidden; }
+        .fit-target { transform-origin: top left; }
         .shop { border: 1px solid #eee; border-radius: 6px; margin-bottom: 8px; overflow: hidden; }
         .shop summary { padding: 8px 10px; cursor: pointer; background: #fcfcfc; }
         .order { border-top: 1px solid #f0f0f0; padding: 8px 10px; }
@@ -140,7 +142,35 @@
                     btn.classList.add('active');
                     document.getElementById(`totals-${day}`).style.display = mode === 'totals' ? 'block' : 'none';
                     document.getElementById(`shops-${day}`).style.display = mode === 'shops' ? 'block' : 'none';
+                    fitVisibleTotals();
                 });
+            });
+            fitVisibleTotals();
+        }
+
+        function fitVisibleTotals() {
+            const visibleTotals = Array.from(document.querySelectorAll('[id^="totals-"]')).filter(el => el.style.display !== 'none');
+            visibleTotals.forEach(container => {
+                const table = container.querySelector('.excel-table');
+                if (!table) return;
+
+                let wrap = container.querySelector('.fit-wrap');
+                let target = container.querySelector('.fit-target');
+                if (!wrap || !target) {
+                    const originalHtml = container.innerHTML;
+                    container.innerHTML = `<div class="fit-wrap"><div class="fit-target">${originalHtml}</div></div>`;
+                    wrap = container.querySelector('.fit-wrap');
+                    target = container.querySelector('.fit-target');
+                }
+
+                target.style.transform = 'scale(1)';
+                target.style.width = '100%';
+                const rect = container.getBoundingClientRect();
+                const availableHeight = Math.max(180, window.innerHeight - rect.top - 20);
+                const naturalHeight = target.scrollHeight;
+                const scale = naturalHeight > availableHeight ? (availableHeight / naturalHeight) : 1;
+                target.style.transform = `scale(${scale})`;
+                wrap.style.height = `${naturalHeight * scale}px`;
             });
         }
 
@@ -159,6 +189,7 @@
         render();
         refresh();
         setInterval(refresh, 5000);
+        window.addEventListener('resize', fitVisibleTotals);
     </script>
 </body>
 </html>

@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        body { font-family: Arial, Helvetica, sans-serif; background: #f6f7fb; margin: 0; padding: 12px; }
+        body { font-family: Arial, Helvetica, sans-serif; background: #f6f7fb; margin: 0; padding: 12px; overflow: hidden; }
         .container { max-width: 980px; margin: 0 auto; }
         .top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
         .actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -29,6 +29,8 @@
         .order-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; font-size: 14px; }
         .items { margin: 0; padding-left: 18px; }
         .muted { color: #777; }
+        .fit-wrap { width: 100%; overflow: hidden; }
+        .fit-target { transform-origin: top left; }
     </style>
 </head>
 <body>
@@ -91,7 +93,32 @@
                     btn.classList.add('active');
                     document.getElementById(`totals-${day}`).style.display = mode === 'totals' ? 'block' : 'none';
                     document.getElementById(`shops-${day}`).style.display = mode === 'shops' ? 'block' : 'none';
+                    fitVisibleTotals();
                 });
+            });
+            fitVisibleTotals();
+        }
+        function fitVisibleTotals() {
+            const visibleTotals = Array.from(document.querySelectorAll('[id^="totals-"]')).filter(el => el.style.display !== 'none');
+            visibleTotals.forEach(container => {
+                const table = container.querySelector('.excel-table');
+                if (!table) return;
+                let wrap = container.querySelector('.fit-wrap');
+                let target = container.querySelector('.fit-target');
+                if (!wrap || !target) {
+                    const originalHtml = container.innerHTML;
+                    container.innerHTML = `<div class="fit-wrap"><div class="fit-target">${originalHtml}</div></div>`;
+                    wrap = container.querySelector('.fit-wrap');
+                    target = container.querySelector('.fit-target');
+                }
+                target.style.transform = 'scale(1)';
+                target.style.width = '100%';
+                const rect = container.getBoundingClientRect();
+                const availableHeight = Math.max(180, window.innerHeight - rect.top - 20);
+                const naturalHeight = target.scrollHeight;
+                const scale = naturalHeight > availableHeight ? (availableHeight / naturalHeight) : 1;
+                target.style.transform = `scale(${scale})`;
+                wrap.style.height = `${naturalHeight * scale}px`;
             });
         }
         async function refresh() {
@@ -108,6 +135,7 @@
         render();
         refresh();
         setInterval(refresh, 10000);
+        window.addEventListener('resize', fitVisibleTotals);
     </script>
 </body>
 </html>
