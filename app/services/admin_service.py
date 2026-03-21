@@ -12,7 +12,9 @@ from app.infrastructure.uow import AsyncpgUnitOfWork
 
 class AdminService:
     @staticmethod
-    def _build_live_orders_payload(rows: list[dict], all_item_names: list[str]) -> dict:
+    def _build_live_orders_payload(
+        rows: list[dict], all_item_names: list[str], *, max_days: int | None = None
+    ) -> dict:
         today = date.today()
         days_map: dict[date, dict] = {}
 
@@ -55,8 +57,12 @@ class AdminService:
 
             day_block['totals_map'][r['item_name']] += int(r['quantity'])
 
+        sorted_days = sorted(days_map.keys(), reverse=True)
+        if max_days is not None:
+            sorted_days = sorted_days[:max_days]
+
         days: list[dict] = []
-        for day in sorted(days_map.keys(), reverse=True):
+        for day in sorted_days:
             block = days_map[day]
             orders_sorted = sorted(
                 block['orders_map'].values(), key=lambda x: x['created'], reverse=True
@@ -289,7 +295,23 @@ class AdminService:
         rows = await uow.orders.admin_rows_live()
         all_items = await uow.items.list_for_admin()
         all_item_names = sorted({str(i['name']) for i in all_items})
-        return AdminService._build_live_orders_payload(rows, all_item_names)
+        return AdminService._build_live_orders_payload(
+            rows, all_item_names, max_days=5
+        )
+
+    @staticmethod
+    async def get_live_orders_archive_payload(*, uow: AsyncpgUnitOfWork) -> dict:
+        assert uow.orders is not None
+        assert uow.items is not None
+        rows = await uow.orders.admin_rows_live()
+        all_items = await uow.items.list_for_admin()
+        all_item_names = sorted({str(i['name']) for i in all_items})
+        full_payload = AdminService._build_live_orders_payload(rows, all_item_names)
+        archive_days = full_payload['days'][5:]
+        return {
+            'days': archive_days,
+            'generated_at': full_payload['generated_at'],
+        }
 
     @staticmethod
     async def export_live_totals(*, uow: AsyncpgUnitOfWork, order_for: date) -> BytesIO:

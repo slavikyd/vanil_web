@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Админ - Живые заявки</title>
+    <title>Админ - Архив заявок</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/static/style.css">
     <style>
@@ -14,19 +14,15 @@
         .status { color: #666; font-size: 13px; }
         .day { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
         .day summary { cursor: pointer; list-style: none; padding: 10px 12px; background: #f9fafb; display: flex; justify-content: space-between; align-items: center; }
-        .day summary::-webkit-details-marker { display: none; }
         .pill { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #e0e7ff; color: #3730a3; }
         .mode-buttons { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eee; }
         .mode-btn { border: 1px solid #ddd; background: #fff; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
         .mode-btn.active { background: #111827; color: #fff; border-color: #111827; }
         .mode { padding: 10px 12px; }
-        .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #eee; }
         .excel-table { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; }
         .excel-table th, .excel-table td { border: 1px solid #d1d5db; padding: 6px 8px; }
         .excel-table th { background: #f3f4f6; text-align: left; }
         .excel-table td:last-child { text-align: right; font-weight: 600; }
-        .day-tools { padding: 0 12px 8px; }
-        .excel-link { display: inline-block; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #111827; background: #fff; font-size: 13px; }
         .shop { border: 1px solid #eee; border-radius: 6px; margin-bottom: 8px; overflow: hidden; }
         .shop summary { padding: 8px 10px; cursor: pointer; background: #fcfcfc; }
         .order { border-top: 1px solid #f0f0f0; padding: 8px 10px; }
@@ -38,17 +34,15 @@
 <body>
     <div class="container">
         <div class="top">
-            <h1 style="margin: 0;">Живые заявки</h1>
+            <h1 style="margin: 0;">Архив заявок</h1>
             <div class="actions">
+                <a class="btn" href="/admin/orders/live">Живые (последние 5 дней)</a>
                 <a class="btn" href="/admin/orders">Обычная страница</a>
-                <a class="btn" href="/admin/orders/live/archive">Архив (старше 5 дней)</a>
-                <a class="btn" href="/">На главную</a>
             </div>
         </div>
         <div class="status" id="status">Обновление...</div>
         <div id="root"></div>
     </div>
-
     <script>
         const root = document.getElementById('root');
         const statusEl = document.getElementById('status');
@@ -58,78 +52,35 @@
             const d = new Date(iso + 'T00:00:00');
             return d.toLocaleDateString('ru-RU');
         }
-
         function renderTotals(day) {
-            if (!day.totals.length) return '<div class="muted">Нет позиций</div>';
-            const rows = day.totals.map(t => `
-                <tr>
-                    <td>${t.name}</td>
-                    <td>${t.quantity}</td>
-                </tr>
-            `).join('');
-            return `
-                <table class="excel-table">
-                    <thead>
-                        <tr>
-                            <th>Позиция</th>
-                            <th>Заказано</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rows}
-                    </tbody>
-                </table>
-            `;
+            const rows = day.totals.map(t => `<tr><td>${t.name}</td><td>${t.quantity}</td></tr>`).join('');
+            return `<table class="excel-table"><thead><tr><th>Позиция</th><th>Заказано</th></tr></thead><tbody>${rows}</tbody></table>`;
         }
-
         function renderShops(day) {
-            if (!day.shops.length) return '<div class="muted">Нет заявок</div>';
             return day.shops.map(shop => {
                 const ordersHtml = shop.orders.map(order => {
                     const itemsHtml = order.items.map(i => `<li>${i.name} - <strong>${i.quantity}</strong></li>`).join('');
-                    return `
-                        <div class="order">
-                            <div class="order-head">
-                                <div><strong>${order.created_hhmm}</strong> | ${order.cashier_name}</div>
-                                <div class="muted">${order.id}</div>
-                            </div>
-                            <ul class="items">${itemsHtml}</ul>
-                        </div>
-                    `;
+                    return `<div class="order"><div class="order-head"><div><strong>${order.created_hhmm}</strong> | ${order.cashier_name}</div><div class="muted">${order.id}</div></div><ul class="items">${itemsHtml}</ul></div>`;
                 }).join('');
-                return `
-                    <details class="shop">
-                        <summary>${shop.shop} (${shop.orders.length})</summary>
-                        ${ordersHtml}
-                    </details>
-                `;
+                return `<details class="shop"><summary>${shop.shop} (${shop.orders.length})</summary>${ordersHtml}</details>`;
             }).join('');
         }
-
         function render() {
             if (!data.days.length) {
-                root.innerHTML = '<div class="day"><div class="mode muted">Нет заявок</div></div>';
+                root.innerHTML = '<div class="day"><div class="mode muted">Архив пуст</div></div>';
                 return;
             }
-
-            root.innerHTML = data.days.map((day) => `
-                <details class="day" ${day.is_today ? 'open' : ''} data-day="${day.date}">
-                    <summary>
-                        <strong>${fmtDate(day.date)}${day.is_today ? ' (сегодня)' : ''}</strong>
-                        <span class="pill">${day.total_orders} заявок</span>
-                    </summary>
+            root.innerHTML = data.days.map(day => `
+                <details class="day" data-day="${day.date}">
+                    <summary><strong>${fmtDate(day.date)}</strong><span class="pill">${day.total_orders} заявок</span></summary>
                     <div class="mode-buttons">
                         <button class="mode-btn active" data-mode="totals" data-day="${day.date}">Все позиции</button>
                         <button class="mode-btn" data-mode="shops" data-day="${day.date}">По магазинам</button>
-                    </div>
-                    <div class="day-tools">
-                        <a class="excel-link" href="/admin/orders/live/export/totals?order_for=${day.date}">Экспорт totals в Excel</a>
                     </div>
                     <div class="mode" id="totals-${day.date}">${renderTotals(day)}</div>
                     <div class="mode" id="shops-${day.date}" style="display:none;">${renderShops(day)}</div>
                 </details>
             `).join('');
-
             root.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -143,22 +94,20 @@
                 });
             });
         }
-
         async function refresh() {
             try {
-                const resp = await fetch('/admin/orders/live/data', { cache: 'no-store' });
+                const resp = await fetch('/admin/orders/live/archive/data', { cache: 'no-store' });
                 if (!resp.ok) throw new Error('bad response');
                 data = await resp.json();
                 render();
                 statusEl.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
             } catch (e) {
-                statusEl.textContent = 'Ошибка обновления, повторим автоматически...';
+                statusEl.textContent = 'Ошибка обновления...';
             }
         }
-
         render();
         refresh();
-        setInterval(refresh, 5000);
+        setInterval(refresh, 10000);
     </script>
 </body>
 </html>

@@ -200,12 +200,10 @@ async def admin_orders_live(
     if not await _ensure_admin_or_redirect(request, uow):
         return RedirectResponse('/', status_code=code.FOUND)
 
-    payload = await AdminService.get_live_orders_payload(uow=uow)
     return templates.TemplateResponse(
         'admin_orders_live.html',
         {
             'request': request,
-            'initial_data': payload,
         },
     )
 
@@ -218,6 +216,27 @@ async def admin_orders_live_data(
     if not await _ensure_admin_or_redirect(request, uow):
         return JSONResponse({'error': 'forbidden'}, status_code=403)
     payload = await AdminService.get_live_orders_payload(uow=uow)
+    return JSONResponse(payload)
+
+
+@router.get('/orders/live/archive', response_class=HTMLResponse)
+async def admin_orders_live_archive(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    if not await _ensure_admin_or_redirect(request, uow):
+        return RedirectResponse('/', status_code=code.FOUND)
+    return templates.TemplateResponse('admin_orders_archive.html', {'request': request})
+
+
+@router.get('/orders/live/archive/data', response_class=JSONResponse)
+async def admin_orders_live_archive_data(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    if not await _ensure_admin_or_redirect(request, uow):
+        return JSONResponse({'error': 'forbidden'}, status_code=403)
+    payload = await AdminService.get_live_orders_archive_payload(uow=uow)
     return JSONResponse(payload)
 
 
