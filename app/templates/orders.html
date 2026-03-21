@@ -2,13 +2,32 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мои заявки</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; padding: 10px; font-size: 18px; }
+        h1 { font-size: 32px; margin-bottom: 10px; }
+        h2 { font-size: 26px; margin: 14px 0 10px; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .button { font-size: 18px; padding: 10px 14px; border-radius: 8px; }
+        .card { padding: 12px; border-radius: 10px; margin-bottom: 10px; }
+        .meta { font-size: 17px; line-height: 1.35; }
+        .items-list { font-size: 17px; line-height: 1.35; }
+        @media (max-width: 600px) {
+            body { font-size: 19px; }
+            h1 { font-size: 34px; }
+            h2 { font-size: 28px; }
+            .button { font-size: 20px; padding: 12px 16px; }
+            .meta, .items-list { font-size: 18px; }
+        }
+    </style>
 </head>
 <body style="font-family: Arial, Helvetica, sans-serif">
     <h1>Мои заявки</h1>
     <div class="actions" style="padding-top: 0.5rem;">
         <a class="button" href="/" style="padding-top: 0.5rem;">← На главную</a>
+        <a class="button" href="/orders/archive" style="padding-top: 0.5rem;">Архив заявок</a>
     </div>
 
     <h2>Сегодня</h2>
@@ -37,39 +56,9 @@
     <p>Сегодня заявок нет.</p>
     {% endif %}
 
-    <h2 style="margin-top: 1.5rem;">Архив</h2>
-    {% if archive_orders %}
-        {% for order_date, orders in archive_orders.items() %}
-        <details style="margin-bottom: 1rem;">
-            <summary style="cursor: pointer; font-weight: 600;">{{ order_date }}</summary>
-            <div class="grid" style="margin-top: 0.75rem;">
-                {% for order in orders %}
-                <div class="card">
-                    <div class="meta">
-                        <div><strong>Создано:</strong> {{ order["created"] }}</div>
-                        <div><strong>Адрес:</strong> {{ order["address"] }}</div>
-                    </div>
-                    <br>
-                    <h4>Содержимое:</h4>
-                    <ul class="items-list">
-                        {% for item in order["items"] %}
-                        <li class="item">
-                            <span>{{ item["name"] }}</span> —
-                            <span>Кол-во: {{ item["quantity"] }}</span>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                </div>
-                {% endfor %}
-            </div>
-        </details>
-        {% endfor %}
-    {% else %}
-        <p>Архив пуст.</p>
-    {% endif %}
-
     <div class="actions" style="padding-top: 0.5rem;">
         <a class="button" href="/" style="padding-top: 0.5rem;">← На главную</a>
+        <a class="button" href="/orders/archive" style="padding-top: 0.5rem;">Архив заявок</a>
     </div>
 </body>
 </html>

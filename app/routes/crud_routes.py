@@ -135,13 +135,51 @@ async def orders_view(
 
     today_key = date.today().isoformat()
     today_orders = grouped.get(today_key, [])
-    archive_orders = {k: v for k, v in grouped.items() if k != today_key}
 
     return templates.TemplateResponse(
         'orders.html',
         {
             'request': request,
             'today_orders': today_orders,
+        },
+    )
+
+
+@router.get('/orders/archive', response_class=HTMLResponse)
+async def orders_archive_view(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    cashier_id = request.session.get('cashier_id')
+    if not cashier_id:
+        return RedirectResponse('/', status_code=code.FOUND)
+
+    assert uow.orders is not None
+    rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
+
+    grouped: dict[str, list[dict]] = {}
+    for r in rows:
+        oid = r['order_id']
+        day_key = r['order_for'].isoformat()
+        day_bucket = grouped.setdefault(day_key, [])
+        order = next((o for o in day_bucket if o['id'] == oid), None)
+        if order is None:
+            order = {
+                'id': oid,
+                'created': r['created'],
+                'address': r['address'],
+                'items': [],
+            }
+            day_bucket.append(order)
+        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
+
+    today_key = date.today().isoformat()
+    archive_orders = {k: v for k, v in grouped.items() if k != today_key}
+
+    return templates.TemplateResponse(
+        'orders_archive.html',
+        {
+            'request': request,
             'archive_orders': archive_orders,
         },
     )
