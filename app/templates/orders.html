@@ -24,14 +24,13 @@
     </style>
 </head>
 <body style="font-family: Arial, Helvetica, sans-serif">
-    <h1>Мои заявки</h1>
+    <h1>Заявки на сегодня</h1>
     <div class="actions" style="padding-top: 0.5rem;">
         <a class="button" href="/" style="padding-top: 0.5rem;">← На главную</a>
         <a class="button" href="/orders/future" style="padding-top: 0.5rem;">Предварительные заявки</a>
         <a class="button" href="/orders/archive" style="padding-top: 0.5rem;">Архив заявок</a>
     </div>
 
-    <h2>Сегодня</h2>
     {% if today_orders %}
     <div class="grid">
         {% for order in today_orders %}
@@ -46,7 +45,7 @@
                     {% for item in order["items"] %}
                     <li class="item">
                         <span>{{ item["name"] }}</span> —
-                        <span>Кол-во: {{ item["quantity"] }}</span>
+                        <span>{{ item["quantity"] }} шт.</span>
                     </li>
                     {% endfor %}
                 </ul>
