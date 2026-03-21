@@ -102,7 +102,7 @@ class OrdersRepo:
             JOIN orders_items oi ON oi.order_id = o.id
             JOIN items i ON oi.item_id = i.id
             {wheresql}
-            ORDER BY o.order_for ASC, o.created ASC
+            ORDER BY o.order_for DESC, o.created DESC
             """,
             *args,
         )
@@ -116,6 +116,36 @@ class OrdersRepo:
                 'cashier_name': r['cashier_name'],
                 'item_name': r['item_name'],
                 'quantity': r['quantity'],
+            }
+            for r in rows
+        ]
+
+    async def cashier_rows(self, *, cashier_id: str) -> list[dict]:
+        rows = await self._conn.fetch(
+            """
+            SELECT
+              o.id AS order_id,
+              o.order_for,
+              o.created,
+              o.address,
+              oi.quantity,
+              i.name AS item_name
+            FROM orders o
+            JOIN orders_items oi ON oi.order_id = o.id
+            JOIN items i ON oi.item_id = i.id
+            WHERE o.cashier_id = $1
+            ORDER BY o.order_for DESC, o.created DESC
+            """,
+            cashier_id,
+        )
+        return [
+            {
+                'order_id': str(r['order_id']),
+                'order_for': r['order_for'],
+                'created': r['created'],
+                'address': r['address'],
+                'item_name': r['item_name'],
+                'quantity': int(r['quantity']),
             }
             for r in rows
         ]

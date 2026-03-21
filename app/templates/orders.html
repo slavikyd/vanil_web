@@ -2,49 +2,74 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Все заявки</title>
+    <title>Мои заявки</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body style="font-family: Arial, Helvetica, sans-serif">
-    <h1>Все заявки: </h1>
-    <div class="actions", style="padding-top: 0.5rem;">
-        <!-- <button href="/">← Back to Home</button> -->
-
-        <a class="button" href="/", style="padding-top: 0.5rem;">← На главную</a>
+    <h1>Мои заявки</h1>
+    <div class="actions" style="padding-top: 0.5rem;">
+        <a class="button" href="/" style="padding-top: 0.5rem;">← На главную</a>
     </div>
-    {% if orders %}
+
+    <h2>Сегодня</h2>
+    {% if today_orders %}
     <div class="grid">
-        {% for order in orders %}
-        <div class="card">
-            <div class="meta">
-                <!-- <div><strong>Order ID:</strong> {{ order["id"] }}</div> -->
-                <div><strong>Создано:</strong> {{ order["created"] }}</div>
-                <div><strong>Кассир:</strong> {{ order["cashier_name"] }}</div>
-                <div><strong>Адрес:</strong> {{ order["address"] }}</div>
-                <!-- <div><strong>Shop ID:</strong> {{ order["shop"] }}</div> -->
+        {% for order in today_orders %}
+            <div class="card">
+                <div class="meta">
+                    <div><strong>Создано:</strong> {{ order["created"] }}</div>
+                    <div><strong>Адрес:</strong> {{ order["address"] }}</div>
+                </div>
+                <br>
+                <h4>Содержимое:</h4>
+                <ul class="items-list">
+                    {% for item in order["items"] %}
+                    <li class="item">
+                        <span>{{ item["name"] }}</span> —
+                        <span>Кол-во: {{ item["quantity"] }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
             </div>
-            <br>
-            <h4>Содержимое:</h4>
-            <ul class="items-list">
-                {% for item in order["items"] %}
-                <li class="item">
-                    <span>{{ item["name"] }}</span> — 
-                    <span>Кол-во: {{ item["quantity"] }}</span>
-                    <!-- <span>${{ item["price"] }}</span> -->
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
         {% endfor %}
     </div>
     {% else %}
-    <p>Нет заявок.</p>
+    <p>Сегодня заявок нет.</p>
     {% endif %}
 
-    <div class="actions", style="padding-top: 0.5rem;">
-        <!-- <button href="/">← Back to Home</button> -->
+    <h2 style="margin-top: 1.5rem;">Архив</h2>
+    {% if archive_orders %}
+        {% for order_date, orders in archive_orders.items() %}
+        <details style="margin-bottom: 1rem;">
+            <summary style="cursor: pointer; font-weight: 600;">{{ order_date }}</summary>
+            <div class="grid" style="margin-top: 0.75rem;">
+                {% for order in orders %}
+                <div class="card">
+                    <div class="meta">
+                        <div><strong>Создано:</strong> {{ order["created"] }}</div>
+                        <div><strong>Адрес:</strong> {{ order["address"] }}</div>
+                    </div>
+                    <br>
+                    <h4>Содержимое:</h4>
+                    <ul class="items-list">
+                        {% for item in order["items"] %}
+                        <li class="item">
+                            <span>{{ item["name"] }}</span> —
+                            <span>Кол-во: {{ item["quantity"] }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endfor %}
+    {% else %}
+        <p>Архив пуст.</p>
+    {% endif %}
 
-        <a class="button" href="/", style="padding-top: 0.5rem;">← На главную</a>
+    <div class="actions" style="padding-top: 0.5rem;">
+        <a class="button" href="/" style="padding-top: 0.5rem;">← На главную</a>
     </div>
 </body>
 </html>
