@@ -20,11 +20,16 @@
         .mode-btn { border: 1px solid #ddd; background: #fff; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
         .mode-btn.active { background: #111827; color: #fff; border-color: #111827; }
         .mode { padding: 8px 10px; }
-        .excel-table { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; }
+        .excel-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; background: #fff; }
         .excel-table th, .excel-table td { border: 1px solid #d1d5db; padding: 3px 5px; line-height: 1.15; }
         .excel-table th { background: #f3f4f6; text-align: left; }
         .excel-table td:last-child { text-align: right; font-weight: 600; }
         .excel-table input { font: inherit; }
+        .excel-table th, .excel-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .excel-table .col-name { width: 46%; }
+        .excel-table .col-stock { width: 18%; text-align: right; }
+        .excel-table .col-ordered { width: 18%; text-align: right; font-weight: 600; }
+        .excel-table .col-missing { width: 18%; text-align: right; font-weight: 600; }
         .day-tools { padding: 0 12px 8px; }
         .excel-link { display: inline-block; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #111827; background: #fff; font-size: 13px; }
         .totals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 6px; align-items: start; }
@@ -104,8 +109,8 @@
                     const stockValueAttr = stock === null ? '' : String(stock);
                     return `
                         <tr data-day="${day.date}" data-item="${t.name}">
-                            <td>${t.name}</td>
-                            <td style="width: 120px;">
+                            <td class="col-name" title="${t.name}">${t.name}</td>
+                            <td class="col-stock">
                                 <input
                                     class="stock-input"
                                     type="number"
@@ -117,14 +122,14 @@
                                     data-ordered="${t.quantity}"
                                 />
                             </td>
-                            <td style="width: 90px; text-align: right; font-weight: 600;">${t.quantity}</td>
-                            <td class="missing-cell" style="width: 110px; text-align: right; font-weight: 600;">${missing}</td>
+                            <td class="col-ordered">${t.quantity}</td>
+                            <td class="missing-cell col-missing">${missing}</td>
                         </tr>
                     `;
                 }).join('');
                 blocks.push(`
                     <table class="excel-table">
-                        <thead><tr><th>Позиция</th><th>на складе</th><th>Заказано</th><th>Не хватает</th></tr></thead>
+                        <thead><tr><th class="col-name">Позиция</th><th class="col-stock">на складе</th><th class="col-ordered">Заказано</th><th class="col-missing">Не хватает</th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                 `);
