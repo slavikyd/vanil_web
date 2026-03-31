@@ -24,6 +24,7 @@
         .excel-table th, .excel-table td { border: 1px solid #d1d5db; padding: 3px 5px; line-height: 1.15; }
         .excel-table th { background: #f3f4f6; text-align: left; }
         .excel-table td:last-child { text-align: right; font-weight: 600; }
+        .excel-table input { font: inherit; }
         .day-tools { padding: 0 12px 8px; }
         .excel-link { display: inline-block; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #111827; background: #fff; font-size: 13px; }
         .totals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 6px; align-items: start; }
@@ -40,12 +41,13 @@
         <div class="top">
             <h1 style="margin: 0;">Живые заявки</h1>
             <div class="actions">
+                <button class="btn" id="btn-refresh" type="button">Обновить</button>
                 <a class="btn" href="/admin/orders">Обычная страница</a>
                 <a class="btn" href="/admin/orders/live/archive">Архив (старше 5 дней)</a>
                 <a class="btn" href="/">На главную</a>
             </div>
         </div>
-        <div class="status" id="status">Обновление...</div>
+        <div class="status" id="status">Нажмите «Обновить»</div>
         <div id="root"></div>
     </div>
 
@@ -53,6 +55,33 @@
         const root = document.getElementById('root');
         const statusEl = document.getElementById('status');
         let data = { days: [] };
+        const STOCK_LS_KEY = 'admin_live_orders_stock_v1';
+        let stockByKey = loadStockByKey();
+
+        function loadStockByKey() {
+            try {
+                const raw = localStorage.getItem(STOCK_LS_KEY);
+                const parsed = raw ? JSON.parse(raw) : {};
+                return parsed && typeof parsed === 'object' ? parsed : {};
+            } catch {
+                return {};
+            }
+        }
+
+        function saveStockByKey() {
+            try { localStorage.setItem(STOCK_LS_KEY, JSON.stringify(stockByKey)); } catch {}
+        }
+
+        function stockKey(dayIso, itemName) {
+            return `${dayIso}::${itemName}`;
+        }
+
+        function toIntOrNull(v) {
+            if (v === '' || v === null || v === undefined) return null;
+            const n = Number(v);
+            if (!Number.isFinite(n)) return null;
+            return Math.max(0, Math.trunc(n));
+        }
 
         function fmtDate(iso) {
             const d = new Date(iso + 'T00:00:00');
@@ -68,10 +97,34 @@
             for (let i = 0; i < columns; i++) {
                 const chunk = day.totals.slice(i * rowsPerColumn, (i + 1) * rowsPerColumn);
                 if (!chunk.length) continue;
-                const rows = chunk.map(t => `<tr><td>${t.name}</td><td>${t.quantity}</td></tr>`).join('');
+                const rows = chunk.map(t => {
+                    const key = stockKey(day.date, t.name);
+                    const stock = toIntOrNull(stockByKey[key]);
+                    const missing = Math.max(0, (Number(t.quantity) || 0) - (stock ?? 0));
+                    const stockValueAttr = stock === null ? '' : String(stock);
+                    return `
+                        <tr data-day="${day.date}" data-item="${t.name}">
+                            <td>${t.name}</td>
+                            <td style="width: 120px;">
+                                <input
+                                    class="stock-input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    inputmode="numeric"
+                                    style="width: 100%; box-sizing: border-box; padding: 3px 5px;"
+                                    value="${stockValueAttr}"
+                                    data-ordered="${t.quantity}"
+                                />
+                            </td>
+                            <td style="width: 90px; text-align: right; font-weight: 600;">${t.quantity}</td>
+                            <td class="missing-cell" style="width: 110px; text-align: right; font-weight: 600;">${missing}</td>
+                        </tr>
+                    `;
+                }).join('');
                 blocks.push(`
                     <table class="excel-table">
-                        <thead><tr><th>Позиция</th><th>Заказано</th></tr></thead>
+                        <thead><tr><th>Позиция</th><th>на складе</th><th>Заказано</th><th>Не хватает</th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                 `);
@@ -141,7 +194,34 @@
             });
         }
 
+        root.addEventListener('input', (e) => {
+            const input = e.target;
+            if (!(input instanceof HTMLInputElement)) return;
+            if (!input.classList.contains('stock-input')) return;
+
+            const row = input.closest('tr');
+            if (!row) return;
+
+            const dayIso = row.getAttribute('data-day') || '';
+            const itemName = row.getAttribute('data-item') || '';
+            const key = stockKey(dayIso, itemName);
+
+            const stock = toIntOrNull(input.value);
+            if (stock === null) {
+                delete stockByKey[key];
+            } else {
+                stockByKey[key] = stock;
+            }
+            saveStockByKey();
+
+            const ordered = toIntOrNull(input.dataset.ordered) ?? 0;
+            const missing = Math.max(0, ordered - (stock ?? 0));
+            const missingCell = row.querySelector('.missing-cell');
+            if (missingCell) missingCell.textContent = String(missing);
+        });
+
         async function refresh() {
+            statusEl.textContent = 'Обновление...';
             try {
                 const resp = await fetch('/admin/orders/live/data', { cache: 'no-store' });
                 if (!resp.ok) throw new Error('bad response');
@@ -149,13 +229,12 @@
                 render();
                 statusEl.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
             } catch (e) {
-                statusEl.textContent = 'Ошибка обновления, повторим автоматически...';
+                statusEl.textContent = 'Ошибка обновления. Нажмите «Обновить» чтобы повторить.';
             }
         }
 
         render();
-        refresh();
-        setInterval(refresh, 5000);
+        document.getElementById('btn-refresh').addEventListener('click', refresh);
     </script>
 </body>
 </html>

@@ -37,11 +37,12 @@
         <div class="top">
             <h1 style="margin: 0;">Архив заявок</h1>
             <div class="actions">
+                <button class="btn" id="btn-refresh" type="button">Обновить</button>
                 <a class="btn" href="/admin/orders/live">Живые (последние 5 дней)</a>
                 <a class="btn" href="/admin/orders">Обычная страница</a>
             </div>
         </div>
-        <div class="status" id="status">Обновление...</div>
+        <div class="status" id="status">Нажмите «Обновить»</div>
         <div id="root"></div>
     </div>
     <script>
@@ -105,6 +106,7 @@
             });
         }
         async function refresh() {
+            statusEl.textContent = 'Обновление...';
             try {
                 const resp = await fetch('/admin/orders/live/archive/data', { cache: 'no-store' });
                 if (!resp.ok) throw new Error('bad response');
@@ -112,12 +114,11 @@
                 render();
                 statusEl.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
             } catch (e) {
-                statusEl.textContent = 'Ошибка обновления...';
+                statusEl.textContent = 'Ошибка обновления. Нажмите «Обновить» чтобы повторить.';
             }
         }
         render();
-        refresh();
-        setInterval(refresh, 10000);
+        document.getElementById('btn-refresh').addEventListener('click', refresh);
     </script>
 </body>
 </html>
