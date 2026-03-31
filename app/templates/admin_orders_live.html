@@ -109,6 +109,8 @@
                     const stockValueAttr = stock === null ? '' : String(stock);
                     return `
                         <tr data-day="${day.date}" data-item="${t.name}">
+                            <td class="col-name" title="${t.name}">${t.name}</td>
+                            <td class="missing-cell col-missing">${missing}</td>
                             <td class="col-ordered">${t.quantity}</td>
                             <td class="col-stock">
                                 <input
@@ -122,14 +124,12 @@
                                     data-ordered="${t.quantity}"
                                 />
                             </td>
-                            <td class="col-name" title="${t.name}">${t.name}</td>
-                            <td class="missing-cell col-missing">${missing}</td>
                         </tr>
                     `;
                 }).join('');
                 blocks.push(`
                     <table class="excel-table">
-                        <thead><tr><th class="col-ordered">Заказано</th><th class="col-stock">Остаток</th><th class="col-name">Позиция</th><th class="col-missing">Не хватает</th></tr></thead>
+                        <thead><tr><th class="col-name">Позиция</th><th class="col-missing">Не хватает</th><th class="col-ordered">Заказано</th><th class="col-stock">Остаток</th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                 `);
