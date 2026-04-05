@@ -6,6 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        .item-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 7.5px; }
+        .item-line .item-title { flex: 1 1 140px; min-width: 0; }
+        .item-comment-toggle {
+            font-size: 12px; padding: 2px 7px; line-height: 1.2; border: 1px solid #ccc; border-radius: 4px;
+            background: #fff; cursor: pointer; flex: 0 0 auto; color: #444;
+        }
+        .item-comment-panel { width: 100%; margin-top: 2px; margin-bottom: 4px; padding-left: 2px; box-sizing: border-box; }
+        .item-comment-panel[hidden] { display: none !important; }
+        .item-comment-input { width: 100%; max-width: 420px; box-sizing: border-box; font: inherit; font-size: 13px; padding: 4px 6px; resize: vertical; min-height: 2.25em; }
+    </style>
 </head>
 <body style="font-family: Arial, Helvetica, sans-serif;">
 
@@ -83,12 +94,18 @@
     <summary style="cursor: pointer; font-weight: 600;">{{ category["name"] }}</summary>
     <div style="margin-top: 8px;">
         {% for item in category["items"] %}
-        <div class="card" style="display: flex; align-items: center; justify-content: space-between; padding: 5px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 7.5px;">
-            <strong>{{ item.name }}</strong>
-            <div class="quantity-selector" style="display: flex; align-items: center;">
-                <button type="button" class="quantity-minus" data-item-id="{{ item.id }}">-</button>
-                <input type="number" id="quantity-{{ item.id }}" data-item-id="{{ item.id }}" value="{{ cart.get(item.id|string, 0) }}" min="0" style="width: 50px; text-align: center;">
-                <button type="button" class="quantity-plus" data-item-id="{{ item.id }}">+</button>
+        <div class="item-block" data-item-block-id="{{ item.id }}">
+            <div class="card item-line">
+                <strong class="item-title">{{ item.name }}</strong>
+                <div class="quantity-selector" style="display: flex; align-items: center;">
+                    <button type="button" class="quantity-minus" data-item-id="{{ item.id }}">-</button>
+                    <input type="number" id="quantity-{{ item.id }}" data-item-id="{{ item.id }}" value="{{ cart.get(item.id|string, 0) }}" min="0" style="width: 50px; text-align: center;">
+                    <button type="button" class="quantity-plus" data-item-id="{{ item.id }}">+</button>
+                </div>
+                <button type="button" class="item-comment-toggle" data-item-id="{{ item.id }}" title="Комментарий">✎</button>
+            </div>
+            <div class="item-comment-panel" id="comment-panel-{{ item.id }}" hidden>
+                <textarea class="item-comment-input" data-item-id="{{ item.id }}" maxlength="500" rows="2" placeholder="Комментарий к позиции">{{ (comments or {}).get(item.id|string, '') }}</textarea>
             </div>
         </div>
         {% endfor %}
@@ -113,20 +130,32 @@
     </form>
 </div>
 
-{% if is_admin %}
+<!-- {% if is_admin %}
 <div style="margin-top: 3em; text-align: center;">
     <a href="/admin/orders">Админ: Все заявки</a>
     <a href="/admin/items">Админ: Товары</a>
 </div>
-{% endif %}
+{% endif %} -->
+
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const selectors = document.querySelectorAll('.quantity-selector');
     const orderList = document.querySelector('.items-list');
+    let commentTimers = {};
 
     window.getTgId = () => document.querySelector('input[name="tg_id"]')?.value || null;
+
+    function applyCommentInputs(comments) {
+        if (!comments) return;
+        document.querySelectorAll('.item-comment-input').forEach((el) => {
+            const id = el.dataset.itemId;
+            if (Object.prototype.hasOwnProperty.call(comments, id)) {
+                el.value = comments[id] || '';
+            }
+        });
+    }
 
     window.sendUpdate = async (itemId, qty) => {
         const formData = new FormData();
@@ -139,14 +168,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const resp = await fetch('/add-to-cart', { method: 'POST', body: formData });
         if (resp.ok) {
             const json = await resp.json();
-            renderOrder(json.cart, json.items_data);
+            renderOrder(json.cart, json.items_data, json.comments);
 
             const input = document.getElementById(`quantity-${itemId}`);
             if (input) input.value = qty;
+            applyCommentInputs(json.comments);
         }
     };
 
-    function renderOrder(cart, items) {
+    async function sendComment(itemId, text) {
+        const formData = new FormData();
+        formData.append('itemid', itemId);
+        formData.append('comment', text);
+        const tgId = getTgId();
+        if (tgId) formData.append('tg_id', tgId);
+        const resp = await fetch('/set-cart-comment', { method: 'POST', body: formData });
+        if (resp.ok) {
+            const json = await resp.json();
+            renderOrder(json.cart, json.items_data, json.comments);
+            applyCommentInputs(json.comments);
+        }
+    }
+
+    function renderOrder(cart, items, comments) {
+        comments = comments || {};
         orderList.innerHTML = '';
         let hasItems = false;
 
@@ -167,8 +212,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.style.padding = '8px';
                 li.style.marginBottom = '8px';
 
+                const note = comments && comments[id] ? `<span style="font-size:12px;color:#666;margin-right:6px;" title="${String(comments[id]).replace(/"/g, '&quot;')}">✎</span>` : '';
+
                 li.innerHTML = `
-                    <strong>${item.name}</strong>
+                    <strong>${note}${item.name}</strong>
                     <div style="display:flex;align-items:center;gap:6px;">
                         <button type="button" class="cart-minus">-</button>
                         <input type="number" value="${qty}" min="0" style="width:50px;text-align:center;">
@@ -185,6 +232,29 @@ document.addEventListener('DOMContentLoaded', () => {
             orderList.innerHTML = '<li style="text-align:center;color:#999;">Корзина пуста</li>';
         }
     }
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.item-comment-toggle');
+        if (!btn) return;
+        const itemId = btn.dataset.itemId;
+        const panel = document.getElementById(`comment-panel-${itemId}`);
+        if (!panel) return;
+        panel.hidden = !panel.hidden;
+        if (!panel.hidden) {
+            const ta = panel.querySelector('.item-comment-input');
+            if (ta) ta.focus();
+        }
+    });
+
+    document.addEventListener('input', (e) => {
+        const ta = e.target.closest('.item-comment-input');
+        if (!ta) return;
+        const itemId = ta.dataset.itemId;
+        clearTimeout(commentTimers[itemId]);
+        commentTimers[itemId] = setTimeout(() => {
+            sendComment(itemId, ta.value);
+        }, 450);
+    });
 
     orderList.addEventListener('click', (e) => {
         const li = e.target.closest('.cart-item');
@@ -223,7 +293,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     try {
-        renderOrder(JSON.parse('{{ cart|tojson }}'), JSON.parse('{{ items|tojson }}'));
+        renderOrder(
+            JSON.parse('{{ cart|tojson }}'),
+            JSON.parse('{{ items|tojson }}'),
+            JSON.parse('{{ comments|default({}, true)|tojson }}'),
+        );
+        applyCommentInputs(JSON.parse('{{ comments|default({}, true)|tojson }}'));
     } catch (e) {
         console.warn('Initial render failed:', e);
     }

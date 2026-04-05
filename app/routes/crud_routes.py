@@ -38,9 +38,39 @@ async def add_to_cart(
         quantity=quantity,
     )
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
+    comments = await CartService.get_comments(
+        cart_repo=cart_repo, session_id=session_id
+    )
     items_data = await PublicService.list_active_items(uow=uow)
 
-    return JSONResponse({'cart': cart, 'items_data': items_data})
+    return JSONResponse(
+        {'cart': cart, 'comments': comments, 'items_data': items_data}
+    )
+
+
+@router.post('/set-cart-comment')
+async def set_cart_comment(
+    request: Request,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+    cart_repo: RedisCartRepo = Depends(get_cart_repo),
+    itemid: str = Form(...),
+    comment: str = Form(''),
+):
+    session_id = get_or_create_session_id(request.session)
+    await CartService.set_comment(
+        cart_repo=cart_repo,
+        session_id=session_id,
+        item_id=itemid,
+        comment=comment,
+    )
+    cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
+    comments = await CartService.get_comments(
+        cart_repo=cart_repo, session_id=session_id
+    )
+    items_data = await PublicService.list_active_items(uow=uow)
+    return JSONResponse(
+        {'cart': cart, 'comments': comments, 'items_data': items_data}
+    )
 
 
 @router.post('/remove-from-cart')
@@ -82,6 +112,9 @@ async def place_order(
     shop_id = None
 
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
+    comments = await CartService.get_comments(
+        cart_repo=cart_repo, session_id=session_id
+    )
 
     try:
         await OrderService.create_order(
@@ -91,6 +124,7 @@ async def place_order(
             cart=cart,
             order_for=order_for,
             store_name=store_name,
+            comments=comments,
         )
     except EmptyCartError:
         return HTMLResponse('Cart is empty', status_code=code.BAD_REQUEST)

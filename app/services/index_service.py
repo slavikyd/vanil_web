@@ -30,6 +30,9 @@ class IndexService:
     ) -> Dict[str, Any]:
         items = await PublicService.list_active_items(uow=uow)
         cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
+        comments = await CartService.get_comments(
+            cart_repo=cart_repo, session_id=session_id
+        )
         is_admin = await AuthService.ensure_admin(uow=uow, cashier_id=cashier_id)
         grouped_items = IndexService._group_items(items)
 
@@ -37,6 +40,7 @@ class IndexService:
             'items': items,
             'grouped_items': grouped_items,
             'cart': cart,
+            'comments': comments,
             'cashier_id': cashier_id,
             'is_admin': is_admin,
         }
@@ -51,10 +55,14 @@ class IndexService:
     ) -> Dict[str, Any]:
         items = await PublicService.list_active_items(uow=uow)
         cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
+        comments = await CartService.get_comments(
+            cart_repo=cart_repo, session_id=session_id
+        )
         is_admin = await AuthService.ensure_admin(uow=uow, cashier_id=cashier_id)
 
         return {
             'items': items,
             'cart': cart,
+            'comments': comments,
             'is_admin': is_admin,
         }

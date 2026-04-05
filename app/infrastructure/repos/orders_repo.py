@@ -29,16 +29,28 @@ class OrdersRepo:
             order_for,
         )
 
-    async def add_items(self, *, order_id: uuid.UUID, cart: dict[str, int]) -> None:
+    async def add_items(
+        self,
+        *,
+        order_id: uuid.UUID,
+        cart: dict[str, int],
+        comments: dict[str, str] | None = None,
+    ) -> None:
+        comments = comments or {}
         for item_id, qty in cart.items():
+            raw = comments.get(item_id)
+            if raw is None:
+                raw = comments.get(str(item_id))
+            note = (raw or '').strip() or None
             await self._conn.execute(
                 """
-                INSERT INTO orders_items (order_id, item_id, quantity)
-                VALUES ($1, $2, $3)
+                INSERT INTO orders_items (order_id, item_id, quantity, comment)
+                VALUES ($1, $2, $3, $4)
                 """,
                 order_id,
                 uuid.UUID(item_id),
                 qty,
+                note,
             )
 
     async def list_orders_for_view(self) -> list[dict]:

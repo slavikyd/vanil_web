@@ -43,6 +43,8 @@ async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
 
     data = response.json()
     assert data['cart'][str(ITEM_ID)] == 2
+    assert 'comments' in data
+    assert data['comments'] == {}
 
 
 async def test_add_item_to_cart_no_login(client, mock_db_pool, mock_redis):
@@ -65,6 +67,7 @@ async def test_add_item_to_cart_no_login(client, mock_db_pool, mock_redis):
 
     data = response.json()
     assert data['cart'][str(ITEM_ID)] == 1
+    assert 'comments' in data
 
 
 async def test_remove_from_cart(client, mock_redis):

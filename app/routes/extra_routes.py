@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
@@ -51,6 +53,7 @@ async def login(
         )
 
     request.session['cashier_id'] = cashier_id
+    request.session['login_at'] = int(time.time())
     get_or_create_session_id(request.session)
 
     return RedirectResponse('/', status_code=302)

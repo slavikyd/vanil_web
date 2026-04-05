@@ -24,6 +24,7 @@ class OrderService:
         cart: dict[str, int],
         order_for: str,
         store_name: str | None = None,
+        comments: dict[str, str] | None = None,
     ) -> uuid.UUID:
         if not cart:
             raise EmptyCartError()
@@ -46,6 +47,8 @@ class OrderService:
                 address=address,
                 order_for=order_for_date,
             )
-            await uow.orders.add_items(order_id=order_id, cart=cart)
+            await uow.orders.add_items(
+                order_id=order_id, cart=cart, comments=comments
+            )
 
         return order_id
