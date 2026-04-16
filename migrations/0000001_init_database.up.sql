@@ -4,25 +4,13 @@ Create EXTENSION if not EXISTS "uuid-ossp";
 create table shops (
     id text primary key,
     phone_number text,
-    address text -- TODO: do it the correct away
+    address text -- TODO: do it the smarter way
     
 );
 create table items (
 	id uuid primary key default uuid_generate_v4(),
-    name text,
-    price float,
-    ttl int -- in days
+    name text
 );
-
-create table warehouse (
-    id uuid primary key default uuid_generate_v4(),
-    item_id uuid references items (id),
-    quantity INT,
-    is_expired bool default False,
-    supplied TIMESTAMP default now(),
-    is_imported_from_db bool DEFAULT True
-);
-
 
 
 

@@ -35,6 +35,24 @@ services:
     env_file:
       - .env
 
+  admin:
+    image: python:3.12-slim
+    working_dir: /code/admin_vanil_test
+    volumes:
+      - .:/code
+    depends_on:
+      - db
+    env_file:
+      - .env
+    expose:
+      - "8001"
+    command:
+      - bash
+      - -lc
+      - |
+        python manage.py migrate --noinput
+        exec python manage.py runserver 0.0.0.0:8001
+
   # frontend:
   #   image: node:20-alpine
   #   working_dir: /app
@@ -61,6 +79,7 @@ services:
       - /etc/letsencrypt:/etc/nginx/certs:ro
     depends_on:
       - web
+      - admin
       # - frontend
 
   migrate:
