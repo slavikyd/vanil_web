@@ -53,8 +53,6 @@ services:
       - -c
       - |
         set -e
-        socat TCP-LISTEN:5432,fork,reuseaddr TCP:db:5432 &
-        sleep 0.2
         poetry run python manage.py migrate --noinput
         exec poetry run python manage.py runserver 0.0.0.0:8001
 
