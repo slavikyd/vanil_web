@@ -1,291 +1,252 @@
 from datetime import date, datetime
+from io import BytesIO
 from typing import Any
 
 from django.contrib import admin
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
-from django.urls import re_path
+from django.template.response import TemplateResponse
+from django.urls import path, re_path
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from .models import *
 from openpyxl import Workbook
 
-def _admin_or_redirect(request: HttpRequest, *, expects_json: bool) -> HttpResponse | None:
-    """
-    Mirror the spec behavior:
-    - HTML: redirect to '/' if not admin
-    - JSON: 403 {"error":"forbidden"} if not admin
-    """
-    if not request.user.is_authenticated:
-        if expects_json:
-            return JsonResponse({"error": "forbidden"}, status=403)
-        return redirect("/")
-    if not request.user.is_staff:
-        if expects_json:
-            return JsonResponse({"error": "forbidden"}, status=403)
-        return redirect("/")
-    return None
 
 
 def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]:
-    """
-    Build payload compatible with LIVE_ADMIN_PAGE_SPEC.md.
-    max_days:
-      - live page: 5
-      - archive: None (all), but offset_days=5 to skip newest 5
-    """
-    all_item_names = list(
-        Items.objects.order_by("name").values_list("name", flat=True)
-    )
-    all_item_names = [n for n in all_item_names if n]  # drop null/empty
-
-    orders_qs = (
-        Orders.objects.select_related("cashier", "shop")
-        .order_by("-order_for", "-created")
-    )
-
-    # Prefetch order items + item in one go.
-    order_items = (
-        OrdersItems.objects.select_related("item")
-        .only("order_id", "item_id", "quantity", "item__name")
-    )
-    orders_qs = orders_qs.prefetch_related(Prefetch("ordersitems_set", queryset=order_items))
-
-    # Group by day.
-    grouped: dict[date, list[Orders]] = {}
-    for o in orders_qs:
-        grouped.setdefault(o.order_for, []).append(o)
-
     today = timezone.localdate()
-    days_sorted = sorted(grouped.keys(), reverse=True)
 
-    days_sorted = days_sorted[offset_days:]
+    # Step 1: fetch only the distinct dates we care about — tiny query, just dates
+    dates_qs = (
+        Orders.objects
+        .values_list("order_for", flat=True)
+        .distinct()
+        .order_by("-order_for")
+    )
+    # Queryset slicing = LIMIT/OFFSET in SQL, no Python filtering
     if max_days is not None:
-        days_sorted = days_sorted[:max_days]
+        dates_qs = dates_qs[offset_days:offset_days + max_days]
+    else:
+        dates_qs = dates_qs[offset_days:]
 
-    days_payload: list[dict[str, Any]] = []
-    for d in days_sorted:
-        day_orders = sorted(
-            grouped.get(d, []),
-            key=lambda x: (x.created or datetime.min.replace(tzinfo=timezone.UTC)),
-            reverse=True,
+    date_range = list(dates_qs)
+    if not date_range:
+        return {"generated_at": timezone.now().isoformat(), "days": []}
+
+    # Step 2: fetch only order items within those dates, DB does the aggregation
+    rows = (
+        OrdersItems.objects
+        .filter(order__order_for__in=date_range)
+        .select_related("item", "order", "order__cashier", "order__shop")
+        .values(
+            "order__order_for",
+            "order__id",
+            "order__address",
+            "order__created",
+            "order__cashier__full_name",
+            "order__shop_id",
+            "item__name",
         )
+        .annotate(total_qty=Sum("quantity"))
+        .order_by("order__order_for", "order__id")
+    )
 
-        totals: dict[str, int] = {name: 0 for name in all_item_names}
-        shops_map: dict[str, list[Orders]] = {}
+    # Step 3: group results in Python — but only the rows we actually fetched
+    grouped: dict[date, dict] = {}
+    for row in rows:
+        d = row["order__order_for"]
+        order_id = row["order__id"]
 
-        for o in day_orders:
-            shop_key = (o.address or getattr(o, "shop_id", None) or "Unknown shop")
-            shops_map.setdefault(shop_key, []).append(o)
+        if d not in grouped:
+            grouped[d] = {"totals": {}, "orders": {}}
 
-            for oi in getattr(o, "ordersitems_set").all():
-                item_name = getattr(oi.item, "name", None)
-                if not item_name:
-                    continue
-                qty = oi.quantity or 0
-                totals[item_name] = totals.get(item_name, 0) + int(qty)
+        # Accumulate totals per item for this day
+        name = row["item__name"]
+        if name:
+            grouped[d]["totals"][name] = grouped[d]["totals"].get(name, 0) + row["total_qty"]
 
-        totals_list = [{"name": n, "quantity": totals.get(n, 0)} for n in sorted(totals.keys())]
-
-        shops_payload = []
-        for shop_key in sorted(shops_map.keys()):
-            shop_orders = sorted(
-                shops_map[shop_key],
-                key=lambda x: (x.created or datetime.min.replace(tzinfo=timezone.UTC)),
-                reverse=True,
-            )
-            orders_payload = []
-            for o in shop_orders:
-                created = o.created
-                created_iso = created.isoformat() if created else None
-                created_hhmm = created.strftime("%H:%M:%S") if created else ""
-
-                items_payload = []
-                for oi in getattr(o, "ordersitems_set").all():
-                    item_name = getattr(oi.item, "name", None)
-                    if not item_name:
-                        continue
-                    items_payload.append({"name": item_name, "quantity": int(oi.quantity or 0)})
-
-                orders_payload.append(
-                    {
-                        "id": str(o.id),
-                        "created": created_iso,
-                        "created_hhmm": created_hhmm,
-                        "address": o.address,
-                        "cashier_name": getattr(o.cashier, "full_name", "") if o.cashier_id else "",
-                        "shop_id": getattr(o, "shop_id", None),
-                        "items": items_payload,
-                    }
-                )
-
-            shops_payload.append({"shop": shop_key, "orders": orders_payload})
-
-        days_payload.append(
-            {
-                "date": d.isoformat(),
-                "is_today": d == today,
-                "total_orders": len(day_orders),
-                "totals": totals_list,
-                "shops": shops_payload,
+        # Accumulate per-order item list for the shops breakdown
+        if order_id not in grouped[d]["orders"]:
+            grouped[d]["orders"][order_id] = {
+                "id": str(order_id),
+                "address": row["order__address"],
+                "created": row["order__created"],
+                "cashier_name": row["order__cashier__full_name"] or "",
+                "shop_id": row["order__shop_id"],
+                "items": [],
             }
-        )
+        if name:
+            grouped[d]["orders"][order_id]["items"].append({
+                "name": name,
+                "quantity": row["total_qty"],
+            })
+
+    # Step 4: shape into the final payload your frontend expects
+    days_payload = []
+    for d in sorted(grouped.keys(), reverse=True):
+        day = grouped[d]
+
+        totals_list = [
+            {"name": n, "quantity": q}
+            for n, q in sorted(day["totals"].items())
+        ]
+
+        # Group orders by shop/address for the "По магазинам" tab
+        shops_map: dict[str, list] = {}
+        for order in day["orders"].values():
+            shop_key = order["address"] or order["shop_id"] or "Unknown shop"
+            shops_map.setdefault(shop_key, []).append(order)
+
+        shops_payload = [
+            {"shop": shop_key, "orders": orders}
+            for shop_key, orders in sorted(shops_map.items())
+        ]
+
+        days_payload.append({
+            "date": d.isoformat(),
+            "is_today": d == today,
+            "total_orders": len(day["orders"]),
+            "totals": totals_list,
+            "shops": shops_payload,
+        })
 
     return {
-        "generated_at": timezone.now().astimezone(timezone.UTC).isoformat(),
+        "generated_at": timezone.now().isoformat(),
         "days": days_payload,
     }
 
 
-def admin_orders_live(request: HttpRequest) -> HttpResponse:
-    denied = _admin_or_redirect(request, expects_json=False)
-    if denied:
-        return denied
-    ctx = {
-        **admin.site.each_context(request),
-        "title": "Админ - Живые заявки",
-        "data_url": "/admin/orders/data",
-        "archive_url": "/admin/orders/archive",
-        "normal_orders_url": "/admin/core/orders/",
-        "home_url": "/",
-        "page_heading": "Живые заявки",
-        "archive_heading": "Архив (старше 5 дней)",
-        "show_archive_link": True,
-        "show_live_link": False,
-    }
-    return render(request, "admin/orders/live.html", ctx)
+@admin.register(Orders)
+class OrdersAdmin(admin.ModelAdmin):
+    # Replaces the default changelist with your live orders page
+    change_list_template = "admin/orders/live.html"
 
-
-def admin_orders_live_data(request: HttpRequest) -> JsonResponse:
-    denied = _admin_or_redirect(request, expects_json=True)
-    if denied:
-        return denied  # type: ignore[return-value]
-    payload = _orders_payload(max_days=5, offset_days=0)
-    return JsonResponse(payload)
-
-
-def admin_orders_live_archive(request: HttpRequest) -> HttpResponse:
-    denied = _admin_or_redirect(request, expects_json=False)
-    if denied:
-        return denied
-    ctx = {
-        **admin.site.each_context(request),
-        "title": "Админ - Живые заявки (архив)",
-        "data_url": "/admin/orders/archive/data",
-        "archive_url": "/admin/orders/archive",
-        "live_url": "/admin/orders",
-        "normal_orders_url": "/admin/core/orders/",
-        "home_url": "/",
-        "page_heading": "Архив (старше 5 дней)",
-        "show_archive_link": False,
-        "show_live_link": True,
-    }
-    return render(request, "admin/orders/archive.html", ctx)
-
-
-def admin_orders_live_archive_data(request: HttpRequest) -> JsonResponse:
-    denied = _admin_or_redirect(request, expects_json=True)
-    if denied:
-        return denied  # type: ignore[return-value]
-    payload = _orders_payload(max_days=None, offset_days=5)
-    return JsonResponse(payload)
-
-
-def admin_orders_live_export_totals(request: HttpRequest) -> HttpResponse:
-    denied = _admin_or_redirect(request, expects_json=False)
-    if denied:
-        return denied
-
-    order_for = parse_date(request.GET.get("order_for") or "")
-    if not order_for:
-        return HttpResponse("Missing or invalid 'order_for' (expected YYYY-MM-DD).", status=400)
-
-
-
-    all_item_names = list(Items.objects.order_by("name").values_list("name", flat=True))
-    all_item_names = [n for n in all_item_names if n]
-
-    totals: dict[str, int] = {name: 0 for name in all_item_names}
-    order_items_qs = (
-        OrdersItems.objects.select_related("item", "order")
-        .filter(order__order_for=order_for)
-        .only("order_id", "item_id", "quantity", "item__name")
-    )
-    for oi in order_items_qs:
-        name = getattr(oi.item, "name", None)
-        if not name:
-            continue
-        totals[name] = totals.get(name, 0) + int(oi.quantity or 0)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = f"Totals {order_for.isoformat()}"
-    ws.append(["Item", "Ordered quantity"])
-    for name in sorted(totals.keys()):
-        ws.append([name, totals.get(name, 0)])
-
-    from io import BytesIO
-
-    buf = BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-
-    filename = f"live_totals_{order_for.isoformat()}.xlsx"
-    resp = HttpResponse(
-        buf.getvalue(),
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return resp
-
-
-def _install_admin_urls() -> None:
-    get_urls = admin.site.get_urls
-
-    def custom_get_urls():
-        urls = get_urls()
+    def get_urls(self):
+        """
+        Proper way to add custom URLs — no monkey-patching.
+        self.admin_site.admin_view() wraps each view with:
+          - login_required
+          - staff_required
+          - CSRF protection
+        So you don't need _admin_or_redirect anymore.
+        """
+        urls = super().get_urls()
         custom = [
-            # Accept both with and without trailing slash.
-            re_path(r"^orders/?$", admin_orders_live),
-            re_path(r"^orders/data/?$", admin_orders_live_data),
-            re_path(r"^orders/archive/?$", admin_orders_live_archive),
-            re_path(r"^orders/archive/data/?$", admin_orders_live_archive_data),
-            re_path(r"^orders/export/totals/?$", admin_orders_live_export_totals),
+            path("live-data/",
+                 self.admin_site.admin_view(self.live_data_view),
+                 name="orders_live_data"),
+
+            path("archive/",
+                 self.admin_site.admin_view(self.archive_view),
+                 name="orders_archive"),
+
+            path("archive/data/",
+                 self.admin_site.admin_view(self.archive_data_view),
+                 name="orders_archive_data"),
+
+            path("export/totals/",
+                 self.admin_site.admin_view(self.export_totals_view),
+                 name="orders_export_totals"),
         ]
+        # custom must come BEFORE urls — Django matches first URL that fits
         return custom + urls
 
-    admin.site.get_urls = custom_get_urls  # type: ignore[method-assign]
+    def changelist_view(self, request, extra_context=None):
+        """
+        This IS the Orders list page in admin (/admin/core/orders/).
+        We override it to render your live orders template instead
+        of the default table of Order rows.
+        """
+        ctx = {
+            **self.admin_site.each_context(request),  # user, site_title, etc.
+            "title": "Живые заявки",
+            # URLs are now proper named reverses — no hardcoded strings
+            "data_url": "live-data/",
+            "archive_url": "archive/",
+            "export_url": "export/totals/",
+            "opts": self.model._meta,  # needed for breadcrumbs to work
+            **(extra_context or {}),
+        }
+        return TemplateResponse(request, "admin/orders/live.html", ctx)
+
+    def live_data_view(self, request: HttpRequest) -> JsonResponse:
+        """Returns JSON for the live page (newest 5 days)."""
+        payload = _orders_payload(max_days=5, offset_days=0)
+        return JsonResponse(payload)
+
+    def archive_view(self, request: HttpRequest) -> HttpResponse:
+        """Renders the archive HTML page (orders older than 5 days)."""
+        ctx = {
+            **self.admin_site.each_context(request),
+            "title": "Архив заявок",
+            "data_url": "data/",
+            "live_url": "../",  # back to changelist
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/orders/archive.html", ctx)
+
+    def archive_data_view(self, request: HttpRequest) -> JsonResponse:
+        """Returns JSON for the archive page (everything older than 5 days)."""
+        payload = _orders_payload(max_days=None, offset_days=5)
+        return JsonResponse(payload)
+
+    def export_totals_view(self, request: HttpRequest) -> HttpResponse:
+        """
+        Returns an .xlsx file for a given date.
+        Expects ?order_for=YYYY-MM-DD in the query string.
+        """
+        order_for = parse_date(request.GET.get("order_for") or "")
+        if not order_for:
+            return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=400)
+
+        all_item_names = list(
+            Items.objects.order_by("name").values_list("name", flat=True)
+        )
+        totals: dict[str, int] = {n: 0 for n in all_item_names if n}
+
+        for oi in (OrdersItems.objects
+                   .select_related("item")
+                   .filter(order__order_for=order_for)
+                   .only("quantity", "item__name")):
+            name = getattr(oi.item, "name", None)
+            if name:
+                totals[name] = totals.get(name, 0) + int(oi.quantity or 0)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f"Totals {order_for}"
+        ws.append(["Item", "Ordered quantity"])
+        for name in sorted(totals):
+            ws.append([name, totals[name]])
+
+        buf = BytesIO()
+        wb.save(buf)
+
+        resp = HttpResponse(
+            buf.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp["Content-Disposition"] = f'attachment; filename="totals_{order_for}.xlsx"'
+        return resp
 
 
-_install_admin_urls()
 
-
-# Register your models here.
 @admin.register(Cashiers)
 class CashiersAdmin(admin.ModelAdmin):
-    list_display = [field.name for field in Cashiers._meta.fields]
-
+    list_display = [f.name for f in Cashiers._meta.fields]
 
 @admin.register(Categories)
 class CategoriesAdmin(admin.ModelAdmin):
-    list_display = [field.name for field in Categories._meta.fields]
-
+    list_display = [f.name for f in Categories._meta.fields]
 
 @admin.register(Items)
 class ItemsAdmin(admin.ModelAdmin):
     list_display = ["name", "active", "category"]
     list_editable = ["active", "category"]
 
-
-@admin.register(Orders)
-class OrdersAdmin(admin.ModelAdmin):
-    list_display = [field.name for field in Orders._meta.fields]
-
-# OrdersItems uses a composite primary key; Django admin does not support that yet.
-
 @admin.register(Shops)
 class ShopsAdmin(admin.ModelAdmin):
     pass
-
