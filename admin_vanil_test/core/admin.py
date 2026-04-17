@@ -3,7 +3,7 @@ from io import BytesIO
 from typing import Any
 
 from django.contrib import admin
-from django.db.models import Prefetch, Sum
+from django.db.models import Prefetch
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
@@ -17,98 +17,95 @@ from openpyxl import Workbook
 
 
 def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]:
-    today = timezone.localdate()
+    """
+    Builds the full data payload for both live and archive views.
 
-    # Step 1: fetch only the distinct dates we care about — tiny query, just dates
-    dates_qs = (
-        Orders.objects
-        .values_list("order_for", flat=True)
-        .distinct()
-        .order_by("-order_for")
+    max_days=5, offset_days=0  → newest 5 days  (live page)
+    max_days=None, offset_days=5 → everything older (archive)
+    """
+    all_item_names = list(
+        Items.objects.order_by("name").values_list("name", flat=True)
     )
-    # Queryset slicing = LIMIT/OFFSET in SQL, no Python filtering
-    if max_days is not None:
-        dates_qs = dates_qs[offset_days:offset_days + max_days]
-    else:
-        dates_qs = dates_qs[offset_days:]
+    all_item_names = [n for n in all_item_names if n]
 
-    date_range = list(dates_qs)
-    if not date_range:
-        return {"generated_at": timezone.now().isoformat(), "days": []}
-
-    # Step 2: fetch only order items within those dates, DB does the aggregation
-    rows = (
+    # Single DB round-trip: orders + their items + shop + cashier
+    order_items_prefetch = (
         OrdersItems.objects
-        .filter(order__order_for__in=date_range)
-        .select_related("item", "order", "order__cashier", "order__shop")
-        .values(
-            "order__order_for",
-            "order__id",
-            "order__address",
-            "order__created",
-            "order__cashier__full_name",
-            "order__shop_id",
-            "item__name",
-        )
-        .annotate(total_qty=Sum("quantity"))
-        .order_by("order__order_for", "order__id")
+        .select_related("item")
+        .only("order_id", "item_id", "quantity", "item__name")
+    )
+    orders_qs = (
+        Orders.objects
+        .select_related("cashier", "shop")
+        .order_by("-order_for", "-created")
+        .prefetch_related(Prefetch("ordersitems_set", queryset=order_items_prefetch))
     )
 
-    # Step 3: group results in Python — but only the rows we actually fetched
-    grouped: dict[date, dict] = {}
-    for row in rows:
-        d = row["order__order_for"]
-        order_id = row["order__id"]
+    # Group orders by their delivery date
+    grouped: dict[date, list] = {}
+    for o in orders_qs:
+        grouped.setdefault(o.order_for, []).append(o)
 
-        if d not in grouped:
-            grouped[d] = {"totals": {}, "orders": {}}
+    today = timezone.localdate()
+    days_sorted = sorted(grouped.keys(), reverse=True)[offset_days:]
+    if max_days is not None:
+        days_sorted = days_sorted[:max_days]
 
-        # Accumulate totals per item for this day
-        name = row["item__name"]
-        if name:
-            grouped[d]["totals"][name] = grouped[d]["totals"].get(name, 0) + row["total_qty"]
-
-        # Accumulate per-order item list for the shops breakdown
-        if order_id not in grouped[d]["orders"]:
-            grouped[d]["orders"][order_id] = {
-                "id": str(order_id),
-                "address": row["order__address"],
-                "created": row["order__created"],
-                "cashier_name": row["order__cashier__full_name"] or "",
-                "shop_id": row["order__shop_id"],
-                "items": [],
-            }
-        if name:
-            grouped[d]["orders"][order_id]["items"].append({
-                "name": name,
-                "quantity": row["total_qty"],
-            })
-
-    # Step 4: shape into the final payload your frontend expects
     days_payload = []
-    for d in sorted(grouped.keys(), reverse=True):
-        day = grouped[d]
+    for d in days_sorted:
+        day_orders = sorted(
+            grouped.get(d, []),
+            key=lambda x: (x.created or datetime.min.replace(tzinfo=timezone.UTC)),
+            reverse=True,
+        )
+
+        # Sum quantities per item across all orders for this day
+        totals: dict[str, int] = {name: 0 for name in all_item_names}
+        shops_map: dict[str, list] = {}
+
+        for o in day_orders:
+            shop_key = o.address or getattr(o, "shop_id", None) or "Unknown shop"
+            shops_map.setdefault(shop_key, []).append(o)
+
+            for oi in o.ordersitems_set.all():
+                name = getattr(oi.item, "name", None)
+                if name:
+                    totals[name] = totals.get(name, 0) + int(oi.quantity or 0)
 
         totals_list = [
-            {"name": n, "quantity": q}
-            for n, q in sorted(day["totals"].items())
+            {"name": n, "quantity": totals.get(n, 0)}
+            for n in sorted(totals.keys())
         ]
 
-        # Group orders by shop/address for the "По магазинам" tab
-        shops_map: dict[str, list] = {}
-        for order in day["orders"].values():
-            shop_key = order["address"] or order["shop_id"] or "Unknown shop"
-            shops_map.setdefault(shop_key, []).append(order)
-
-        shops_payload = [
-            {"shop": shop_key, "orders": orders}
-            for shop_key, orders in sorted(shops_map.items())
-        ]
+        shops_payload = []
+        for shop_key in sorted(shops_map.keys()):
+            shop_orders = sorted(
+                shops_map[shop_key],
+                key=lambda x: (x.created or datetime.min.replace(tzinfo=timezone.UTC)),
+                reverse=True,
+            )
+            orders_payload = []
+            for o in shop_orders:
+                items_payload = [
+                    {"name": oi.item.name, "quantity": int(oi.quantity or 0)}
+                    for oi in o.ordersitems_set.all()
+                    if getattr(oi.item, "name", None)
+                ]
+                orders_payload.append({
+                    "id": str(o.id),
+                    "created": o.created.isoformat() if o.created else None,
+                    "created_hhmm": o.created.strftime("%H:%M:%S") if o.created else "",
+                    "address": o.address,
+                    "cashier_name": getattr(o.cashier, "full_name", "") if o.cashier_id else "",
+                    "shop_id": getattr(o, "shop_id", None),
+                    "items": items_payload,
+                })
+            shops_payload.append({"shop": shop_key, "orders": orders_payload})
 
         days_payload.append({
             "date": d.isoformat(),
             "is_today": d == today,
-            "total_orders": len(day["orders"]),
+            "total_orders": len(day_orders),
             "totals": totals_list,
             "shops": shops_payload,
         })
@@ -117,6 +114,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
         "generated_at": timezone.now().isoformat(),
         "days": days_payload,
     }
+
 
 
 @admin.register(Orders)
