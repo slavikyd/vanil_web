@@ -6,15 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.constants import SESSION_MAX_AGE_SECONDS
 from app.db import connect_db
 from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.logging import setup_logging
 from app.redis import redis
-from app.routes import admin_routes, crud_routes, extra_routes
+from app.routes import crud_routes, extra_routes
+
 
 logger = logging.getLogger(__name__)
 
+
+SESSION_MAX_AGE_SECONDS = int(os.getenv('SESSION_MAX_AGE_SECONDS'))
 
 setup_logging()
 app = FastAPI()

@@ -35,7 +35,6 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
 ]
 
-# Origins the browser may send (scheme + host, no path). Punycode matches TLS cert / URL bar.
 _env_csrf = [x.strip() for x in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if x.strip()]
 CSRF_TRUSTED_ORIGINS = _env_csrf or [
     'https://xn--90aioe3a8b4a.xn--p1ai',
@@ -44,7 +43,6 @@ CSRF_TRUSTED_ORIGINS = _env_csrf or [
     'http://127.0.0.1',
 ]
 
-# Behind nginx TLS termination
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 

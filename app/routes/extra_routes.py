@@ -1,6 +1,6 @@
 import time
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.infrastructure.redis.cart_repo import RedisCartRepo
@@ -56,7 +56,7 @@ async def login(
     request.session['login_at'] = int(time.time())
     get_or_create_session_id(request.session)
 
-    return RedirectResponse('/', status_code=302)
+    return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
 @router.post('/logout')
@@ -69,7 +69,7 @@ async def logout(
         await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
 
     request.session.clear()
-    return RedirectResponse('/', status_code=302)
+    return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
 @router.get('/api/data', response_class=JSONResponse)
@@ -80,7 +80,7 @@ async def get_data_json(
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return JSONResponse({'error': 'Not logged in'}, status_code=401)
+        return JSONResponse({'error': 'Not logged in'}, status_code=status.HTTP_401_UNAUTHORIZED)
 
     session_id = get_or_create_session_id(request.session)
 

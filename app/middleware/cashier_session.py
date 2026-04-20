@@ -1,16 +1,16 @@
 import logging
 import time
+import os
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.constants import SESSION_MAX_AGE_SECONDS
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 
 logger = logging.getLogger(__name__)
 
+SESSION_MAX_AGE_SECONDS = int(os.getenv('SESSION_MAX_AGE_SECONDS'))
 
 class CashierSessionTimeoutMiddleware(BaseHTTPMiddleware):
-    """Drop cashier session after SESSION_MAX_AGE_SECONDS from login; clear cart in Redis."""
 
     async def dispatch(self, request, call_next):
         session = request.session

@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from datetime import date
 
-import app.http_codes as code
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow
@@ -86,7 +85,7 @@ async def remove_from_cart(
         item_id=item_id,
         quantity=0,
     )
-    return RedirectResponse('/', status_code=code.FOUND)
+    return RedirectResponse('/', status_code=status.HTTP_)
 
 
 @router.post('/place_order')
@@ -102,11 +101,11 @@ async def place_order(
 
     cashier_id = session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     session_id = session.get('session_id')
     if not session_id:
-        return HTMLResponse('Invalid session', status_code=code.BAD_REQUEST)
+        return HTMLResponse('Invalid session', status_code=status.HTTP_400_BAD_REQUEST)
 
     # Temporarily decouple order creation from Telegram shop id.
     shop_id = None
@@ -127,16 +126,16 @@ async def place_order(
             comments=comments,
         )
     except EmptyCartError:
-        return HTMLResponse('Cart is empty', status_code=code.BAD_REQUEST)
+        return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
     except InvalidOrderDateError:
-        return HTMLResponse('Invalid order date', status_code=code.BAD_REQUEST)
+        return HTMLResponse('Invalid order date', status_code=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return HTMLResponse(
-            f'Failed to create order: {e}', status_code=code.INTERNAL_SERVER_ERROR
+            f'Failed to create order: {e}', status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
     await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
-    return RedirectResponse('/', status_code=code.FOUND)
+    return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
 @router.get('/orders', response_class=HTMLResponse)
@@ -146,7 +145,7 @@ async def orders_view(
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
@@ -186,7 +185,7 @@ async def orders_archive_view(
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
@@ -218,7 +217,7 @@ async def orders_archive_view(
         'orders_archive.html',
         {
             'request': request,
-            'archive_orders': past_orders,  # Now contains only past orders
+            'archive_orders': past_orders,  
         },
     )
 
@@ -229,7 +228,7 @@ async def orders_future_view(
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
@@ -251,10 +250,11 @@ async def orders_future_view(
         order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
 
     today_key = date.today().isoformat()
-    # Keep only orders from tomorrow and future (tomorrow and newer)
+
+    # TODO: DRY went to hell with this one. Remove this tomfoolery
     future_orders = {
         k: v for k, v in grouped.items() 
-        if k > today_key  # This will keep all dates after today
+        if k > today_key  
     }
 
     return templates.TemplateResponse(

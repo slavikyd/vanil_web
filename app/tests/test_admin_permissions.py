@@ -1,4 +1,4 @@
-import app.http_codes as code
+from fastapi import status
 from app.tests.fixtures.constants import ADMIN_ID
 
 
@@ -21,11 +21,11 @@ async def test_admin_access_allowed(client, mock_db_pool):
         data={'cashierid': ADMIN_ID, 'cashier_id': ADMIN_ID},
         follow_redirects=False,
     )
-    assert resp_login.status_code != code.UNPROCESSABLE_ENTITY, resp_login.text
-    assert resp_login.status_code == code.FOUND
+    assert resp_login.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, resp_login.text
+    assert resp_login.status_code == status.HTTP_302_FOUND
 
     response = await client.get('/admin/items', follow_redirects=False)
     assert response.status_code in (
-        code.OK,
-        code.FOUND,
+        status.HTTP_200_OK,
+        status.HTTP_302_FOUND,
     ), response.text
