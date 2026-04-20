@@ -15,6 +15,7 @@ from .models import *
 from openpyxl import Workbook
 
 
+# TODO: consider move to plain SQL 
 
 def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]:
     """
@@ -28,7 +29,6 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
     )
     all_item_names = [n for n in all_item_names if n]
 
-    # Single DB round-trip: orders + their items + shop + cashier
     order_items_prefetch = (
         OrdersItems.objects
         .select_related("item")
@@ -41,7 +41,6 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
         .prefetch_related(Prefetch("ordersitems_set", queryset=order_items_prefetch))
     )
 
-    # Group orders by their delivery date
     grouped: dict[date, list] = {}
     for o in orders_qs:
         grouped.setdefault(o.order_for, []).append(o)
@@ -59,7 +58,6 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             reverse=True,
         )
 
-        # Sum quantities per item across all orders for this day
         totals: dict[str, int] = {name: 0 for name in all_item_names}
         shops_map: dict[str, list] = {}
 
@@ -119,18 +117,10 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
 
 @admin.register(Orders)
 class OrdersAdmin(admin.ModelAdmin):
-    # Replaces the default changelist with your live orders page
     change_list_template = "admin/orders/live.html"
 
     def get_urls(self):
-        """
-        Proper way to add custom URLs — no monkey-patching.
-        self.admin_site.admin_view() wraps each view with:
-          - login_required
-          - staff_required
-          - CSRF protection
-        So you don't need _admin_or_redirect anymore.
-        """
+
         urls = super().get_urls()
         custom = [
             path("live-data/",
@@ -149,23 +139,18 @@ class OrdersAdmin(admin.ModelAdmin):
                  self.admin_site.admin_view(self.export_totals_view),
                  name="orders_export_totals"),
         ]
-        # custom must come BEFORE urls — Django matches first URL that fits
+
         return custom + urls
 
     def changelist_view(self, request, extra_context=None):
-        """
-        This IS the Orders list page in admin (/admin/core/orders/).
-        We override it to render your live orders template instead
-        of the default table of Order rows.
-        """
+
         ctx = {
-            **self.admin_site.each_context(request),  # user, site_title, etc.
-            "title": "Живые заявки",
-            # URLs are now proper named reverses — no hardcoded strings
+            **self.admin_site.each_context(request), 
+            "title": "Заявки",
             "data_url": "live-data/",
             "archive_url": "archive/",
             "export_url": "export/totals/",
-            "opts": self.model._meta,  # needed for breadcrumbs to work
+            "opts": self.model._meta,
             **(extra_context or {}),
         }
         return TemplateResponse(request, "admin/orders/live.html", ctx)
@@ -181,7 +166,7 @@ class OrdersAdmin(admin.ModelAdmin):
             **self.admin_site.each_context(request),
             "title": "Архив заявок",
             "data_url": "data/",
-            "live_url": "../",  # back to changelist
+            "live_url": "../", 
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/orders/archive.html", ctx)
