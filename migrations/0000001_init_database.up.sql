@@ -33,6 +33,7 @@ create table orders_items (
     order_id uuid references orders (id),
     item_id uuid REFERENCES items (id),
     quantity int,
+    comment text,
     PRIMARY key(order_id, item_id)
 );
 

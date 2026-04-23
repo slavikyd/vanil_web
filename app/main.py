@@ -68,7 +68,9 @@ async def shutdown():
 
 app.include_router(extra_routes.router)
 app.include_router(crud_routes.router)
-# app.include_router(admin_routes.router)
+# app.include_router(admin_routes.router) #self written admin routes disabled in favor of new Django admin 
+
+
 if __name__ == '__main__':
     import uvicorn
 

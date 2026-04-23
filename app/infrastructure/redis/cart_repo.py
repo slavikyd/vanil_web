@@ -1,10 +1,9 @@
 import logging
-
-from app.constants import CART_TTL_SECONDS
+import os
 from app.redis import redis
 
 logger = logging.getLogger(__name__)
-
+CART_TTL_SECONDS = int(os.getenv('SESSION_MAX_AGE_SECONDS'))
 
 class RedisCartRepo:
     def _key(self, session_id: str) -> str:

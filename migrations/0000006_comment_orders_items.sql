@@ -1,1 +1,0 @@
-ALTER TABLE orders_items ADD COLUMN comment text;
