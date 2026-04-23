@@ -193,7 +193,7 @@ class OrdersRepo:
     async def export_order_items(self, *, order_id: uuid.UUID) -> list[dict]:
         rows = await self._conn.fetch(
             """
-            SELECT oi.quantity, i.name, i.price
+            SELECT oi.quantity, i.name
             FROM orders_items oi
             JOIN items i ON i.id = oi.item_id
             WHERE oi.order_id = $1
@@ -201,7 +201,7 @@ class OrdersRepo:
             order_id,
         )
         return [
-            {'name': r['name'], 'quantity': r['quantity'], 'price': float(r['price'])}
+            {'name': r['name'], 'quantity': r['quantity']}
             for r in rows
         ]
 

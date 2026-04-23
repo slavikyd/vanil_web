@@ -10,7 +10,7 @@ class ItemsRepo:
     async def list_active(self) -> list[dict]:
         rows = await self._conn.fetch(
             """
-            SELECT i.id, i.name, i.price, i.category, c.name AS category_name
+            SELECT i.id, i.name, i.category, c.name AS category_name
             FROM items i
             LEFT JOIN categories c ON c.id = i.category
             WHERE active = TRUE
@@ -21,7 +21,6 @@ class ItemsRepo:
             {
                 'id': str(r['id']),
                 'name': r['name'],
-                'price': float(r['price']),
                 'category_id': str(r.get('category')) if r.get('category') else None,
                 'category_name': (r.get('category_name') or 'Без категории'),
             }
@@ -49,16 +48,15 @@ class ItemsRepo:
         ]
 
     async def create(
-        self, *, name: str, price: float, ttl: int, category_id: uuid.UUID | None
+        self, *, name: str, category_id: uuid.UUID | None
     ) -> None:
         await self._conn.execute(
             """
-            INSERT INTO items (name, price, ttl, active, category)
-            VALUES ($1, $2, $3, TRUE, $4)
+            INSERT INTO items (name, active, category)
+            VALUES ($1, $2, $3)
             """,
             name,
-            price,
-            ttl,
+            True,
             category_id,
         )
 

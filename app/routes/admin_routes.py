@@ -25,8 +25,6 @@ async def create_item(
     request: Request,
     uow: AsyncpgUnitOfWork = Depends(get_uow),
     name: str = Form(...),
-    price: float = Form(...),
-    ttl: int = Form(...),
     category_id: str = Form(''),
 ):
     """Item entity creation endpoint
@@ -35,8 +33,6 @@ async def create_item(
         request (Request): request
         uow (AsyncpgUnitOfWork, optional): unit of work. Defaults to Depends(get_uow).
         name (str, optional): name of the new item. Defaults to Form(...).
-        price (float, optional): item's price. Defaults to Form(...).
-        ttl (int, optional): time to life of the item. Defaults to Form(...).
 
     Returns:
         RedirectResponse: onto the /admin/items endpoint and status code 302 FOUND
@@ -48,8 +44,6 @@ async def create_item(
     await AdminService.create_item(
         uow=uow,
         name=name,
-        price=price,
-        ttl=ttl,
         category_id=parsed_category_id,
     )
     return RedirectResponse('/admin/items', status_code=status.HTTP_302_FOUND)

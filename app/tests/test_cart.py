@@ -17,7 +17,7 @@ async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
 
     conn.fetchrow.side_effect = fetchrow_side_effect
 
-    conn.fetch.return_value = [{'id': ITEM_ID, 'name': 'Test Item', 'price': 10.0}]
+    conn.fetch.return_value = [{'id': ITEM_ID, 'name': 'Test Item'}]
 
     mock_redis.hgetall.return_value = {str(ITEM_ID): '2'}
 

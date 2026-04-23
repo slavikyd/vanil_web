@@ -103,13 +103,11 @@ class AdminService:
         *,
         uow: AsyncpgUnitOfWork,
         name: str,
-        price: float,
-        ttl: int,
         category_id: uuid.UUID | None,
     ) -> None:
         assert uow.items is not None
         await uow.items.create(
-            name=name, price=price, ttl=ttl, category_id=category_id
+            name=name, category_id=category_id
         )
 
     @staticmethod
@@ -216,7 +214,6 @@ class AdminService:
                         'Cashier',
                         'Item',
                         'Qty',
-                        'Price',
                     ]
                 )
 
@@ -230,7 +227,6 @@ class AdminService:
                         o['cashier_name'],
                         it['name'],
                         it['quantity'],
-                        float(it['price']),
                     ]
                 )
 
