@@ -14,6 +14,23 @@ from app.settings.config import templates
 
 router = APIRouter(tags=['crud'])
 
+def group_orders_by_day(rows: list[dict]) -> dict[str, list[dict]]:
+    grouped: dict[str, list[dict]] = {}
+    for r in rows:
+        oid = r['order_id']
+        day_key = r['order_for'].isoformat()
+        day_bucket = grouped.setdefault(day_key, [])
+        order = next((o for o in day_bucket if o['id'] == oid), None)
+        if order is None:
+            order = {
+                'id': oid,
+                'created': r['created'],
+                'address': r['address'],
+                'items': [],
+            }
+            day_bucket.append(order)
+        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
+    return grouped
 
 @router.post('/add-to-cart')
 async def add_to_cart(
@@ -83,9 +100,9 @@ async def remove_from_cart(
         cart_repo=cart_repo,
         session_id=session_id,
         item_id=item_id,
-        quantity=0,
+        quantity=0, #TODO remove the magic number
     )
-    return RedirectResponse('/', status_code=status.HTTP_)
+    return RedirectResponse('/', status_code=status.HTTP_302_FOUND) 
 
 
 @router.post('/place_order')
@@ -148,33 +165,12 @@ async def orders_view(
         return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
-    rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
-
-    grouped: dict[str, list[dict]] = {}
-    for r in rows:
-        oid = r['order_id']
-        day_key = r['order_for'].isoformat()
-        day_bucket = grouped.setdefault(day_key, [])
-        order = next((o for o in day_bucket if o['id'] == oid), None)
-        if order is None:
-            order = {
-                'id': oid,
-                'created': r['created'],
-                'address': r['address'],
-                'items': [],
-            }
-            day_bucket.append(order)
-        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
-
-    today_key = date.today().isoformat()
-    today_orders = grouped.get(today_key, [])
-
+    rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='today')
+    grouped = group_orders_by_day(rows)
+    today_orders = grouped.get(date.today().isoformat(), [])
     return templates.TemplateResponse(
         'orders.html',
-        {
-            'request': request,
-            'today_orders': today_orders,
-        },
+        {'request': request, 'today_orders': today_orders},
     )
 
 
@@ -188,37 +184,11 @@ async def orders_archive_view(
         return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
-    rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
-
-    grouped: dict[str, list[dict]] = {}
-    for r in rows:
-        oid = r['order_id']
-        day_key = r['order_for'].isoformat()
-        day_bucket = grouped.setdefault(day_key, [])
-        order = next((o for o in day_bucket if o['id'] == oid), None)
-        if order is None:
-            order = {
-                'id': oid,
-                'created': r['created'],
-                'address': r['address'],
-                'items': [],
-            }
-            day_bucket.append(order)
-        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
-
-    today_key = date.today().isoformat()
-    # Keep only orders from yesterday and older (dates less than today)
-    past_orders = {
-        k: v for k, v in grouped.items() 
-        if k < today_key  # This will keep all dates before today
-    }
-
+    rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='past')
+    grouped = group_orders_by_day(rows)
     return templates.TemplateResponse(
         'orders_archive.html',
-        {
-            'request': request,
-            'archive_orders': past_orders,  
-        },
+        {'request': request, 'archive_orders': grouped},
     )
 
 @router.get('/orders/future', response_class=HTMLResponse)
@@ -231,36 +201,11 @@ async def orders_future_view(
         return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
-    rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
 
-    grouped: dict[str, list[dict]] = {}
-    for r in rows:
-        oid = r['order_id']
-        day_key = r['order_for'].isoformat()
-        day_bucket = grouped.setdefault(day_key, [])
-        order = next((o for o in day_bucket if o['id'] == oid), None)
-        if order is None:
-            order = {
-                'id': oid,
-                'created': r['created'],
-                'address': r['address'],
-                'items': [],
-            }
-            day_bucket.append(order)
-        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
-
-    today_key = date.today().isoformat()
-
-    # TODO: DRY went to hell with this one. Remove this tomfoolery
-    future_orders = {
-        k: v for k, v in grouped.items() 
-        if k > today_key  
-    }
+    rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='future')
+    grouped = group_orders_by_day(rows)
 
     return templates.TemplateResponse(
         'orders_future.html',
-        {
-            'request': request,
-            'future_orders': future_orders,
-        },
+        {'request': request, 'future_orders': grouped},
     )

@@ -2,11 +2,31 @@ import uuid
 from datetime import date
 
 from asyncpg import Connection
-
+from typing import Literal
 
 class OrdersRepo:
     def __init__(self, conn: Connection):
         self._conn = conn
+
+    # TODO: maybe I don't need this here...
+    def group_orders_by_day(self, rows: list[dict]) -> dict[str, list[dict]]:
+        grouped: dict[str, list[dict]] = {}
+        for r in rows:
+            oid = r['order_id']
+            day_key = r['order_for'].isoformat()
+            day_bucket = grouped.setdefault(day_key, [])
+            order = next((o for o in day_bucket if o['id'] == oid), None)
+            if order is None:
+                order = {
+                    'id': oid,
+                    'created': r['created'],
+                    'address': r['address'],
+                    'items': [],
+                }
+                day_bucket.append(order)
+            order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
+        return grouped
+    
 
     async def create_order(
         self,
@@ -16,42 +36,39 @@ class OrdersRepo:
         shop_id: str,
         address: str,
         order_for: date,
+        comment: str | None,
     ) -> None:
         await self._conn.execute(
             """
-            INSERT INTO orders (id, cashier_id, shop_id, address, order_for)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO orders (id, cashier_id, shop_id, address, order_for, comment)
+            VALUES ($1, $2, $3, $4, $5, $6)
             """,
             order_id,
             cashier_id,
             shop_id,
             address,
             order_for,
+            comment,
         )
 
     async def add_items(
         self,
-        *,
         order_id: uuid.UUID,
         cart: dict[str, int],
-        comments: dict[str, str] | None = None,
+        comments: dict[str, str],
     ) -> None:
-        comments = comments or {}
-        for item_id, qty in cart.items():
-            raw = comments.get(item_id)
-            if raw is None:
-                raw = comments.get(str(item_id))
-            note = (raw or '').strip() or None
-            await self._conn.execute(
-                """
-                INSERT INTO orders_items (order_id, item_id, quantity, comment)
-                VALUES ($1, $2, $3, $4)
-                """,
-                order_id,
-                uuid.UUID(item_id),
-                qty,
-                note,
-            )
+
+        item_ids = [uuid.UUID(item_id) for item_id in cart]
+        quantities = list(cart.values())
+        notes = [(comments.get(item_id) or '').strip() or None for item_id in cart]
+
+        await self._conn.executemany(
+            """
+            INSERT INTO orders_items (order_id, item_id, quantity, comment)
+            VALUES ($1, $2, $3, $4)
+            """,
+            [(order_id, item_id, qty, note) for item_id, qty, note in zip(item_ids, quantities, notes)],
+        )
 
     async def list_orders_for_view(self) -> list[dict]:
         rows = await self._conn.fetch(
@@ -64,7 +81,7 @@ class OrdersRepo:
         )
         return [
             {
-                'id': str(r['id']),
+                'id': r['id'],
                 'created': r['created'],
                 'address': r['address'],
                 'cashier_name': r['cashier_name'],
@@ -121,7 +138,7 @@ class OrdersRepo:
 
         return [
             {
-                'order_id': str(r['order_id']),
+                'order_id': r['order_id'],
                 'order_for': r['order_for'],
                 'created': r['created'],
                 'address': r['address'],
@@ -132,9 +149,18 @@ class OrdersRepo:
             for r in rows
         ]
 
-    async def cashier_rows(self, *, cashier_id: str) -> list[dict]:
+    async def cashier_rows(self, *, cashier_id: str, date_filter: Literal['today', 'past', 'future']) -> list[dict]:
+
+        today = date.today()
+
+        conditions = {
+            'today': 'o.order_for = $2',
+            'past': 'o.order_for < $2',
+            'future': 'o.order_for > $2',
+        }
+
         rows = await self._conn.fetch(
-            """
+            f"""
             SELECT
               o.id AS order_id,
               o.order_for,
@@ -145,14 +171,15 @@ class OrdersRepo:
             FROM orders o
             JOIN orders_items oi ON oi.order_id = o.id
             JOIN items i ON oi.item_id = i.id
-            WHERE o.cashier_id = $1
+            WHERE o.cashier_id = $1 AND {conditions[date_filter]}
             ORDER BY o.order_for DESC, o.created DESC
             """,
             cashier_id,
+            today,
         )
         return [
             {
-                'order_id': str(r['order_id']),
+                'order_id': r['order_id'],
                 'order_for': r['order_for'],
                 'created': r['created'],
                 'address': r['address'],
@@ -182,7 +209,7 @@ class OrdersRepo:
 
         return [
             {
-                'id': str(r['id']),
+                'id': r['id'],
                 'created': r['created'],
                 'address': r['address'],
                 'cashier_name': r['cashier_name'],
@@ -222,36 +249,4 @@ class OrdersRepo:
             for r in rows
         ]
 
-    async def admin_rows_live(self) -> list[dict]:
-        rows = await self._conn.fetch(
-            """
-            SELECT
-              o.id AS order_id,
-              o.order_for,
-              o.created,
-              o.shop_id,
-              o.address,
-              c.full_name AS cashier_name,
-              oi.quantity,
-              i.name AS item_name
-            FROM orders o
-            JOIN cashiers c ON o.cashier_id = c.id
-            JOIN orders_items oi ON oi.order_id = o.id
-            JOIN items i ON oi.item_id = i.id
-            ORDER BY o.order_for DESC, o.created DESC, o.id
-            """
-        )
 
-        return [
-            {
-                'order_id': str(r['order_id']),
-                'order_for': r['order_for'],
-                'created': r['created'],
-                'shop_id': r['shop_id'],
-                'address': r['address'],
-                'cashier_name': r['cashier_name'],
-                'item_name': r['item_name'],
-                'quantity': r['quantity'],
-            }
-            for r in rows
-        ]

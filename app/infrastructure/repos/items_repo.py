@@ -27,28 +27,30 @@ class ItemsRepo:
             for r in rows
         ]
 
-    async def list_for_admin(self) -> list[dict]:
-        rows = await self._conn.fetch(
-            """
-            SELECT i.id, i.name, i.active, i.category, c.name AS category_name
-            FROM items i
-            LEFT JOIN categories c ON c.id = i.category
-            ORDER BY c.name NULLS LAST, i.name
-            """
-        )
-        return [
-            {
-                'id': str(r['id']),
-                'name': r['name'],
-                'active': bool(r['active']),
-                'category_id': str(r.get('category')) if r.get('category') else None,
-                'category_name': (r.get('category_name') or 'Без категории'),
-            }
-            for r in rows
-        ]
+    # TODO: Remove as deprecated
+    # async def list_for_admin(self) -> list[dict]:
+    #     rows = await self._conn.fetch(
+    #         """
+    #         SELECT i.id, i.name, i.active, i.category, c.name AS category_name
+    #         FROM items i
+    #         LEFT JOIN categories c ON c.id = i.category
+    #         ORDER BY c.name NULLS LAST, i.name
+    #         """
+    #     )
+    #     return [
+    #         {
+    #             'id': str(r['id']),
+    #             'name': r['name'],
+    #             'active': bool(r['active']),
+    #             'category_id': str(r.get('category')) if r.get('category') else None,
+    #             'category_name': (r.get('category_name') or 'Без категории'),
+    #         }
+    #         for r in rows
+    #     ]
 
+    # TODO: remove as deprecated
     async def create(
-        self, *, name: str, category_id: uuid.UUID | None
+        self, name: str, active: bool = True, category_id: uuid.UUID | None = None
     ) -> None:
         await self._conn.execute(
             """
@@ -56,13 +58,15 @@ class ItemsRepo:
             VALUES ($1, $2, $3)
             """,
             name,
-            True,
+            active,
             category_id,
         )
 
+    # TODO: remove as deprecated
     async def delete(self, *, item_id: uuid.UUID) -> None:
         await self._conn.execute('DELETE FROM items WHERE id = $1', item_id)
 
+    # TODO: remove as deprecated
     async def update_admin_fields(
         self, *, item_id: uuid.UUID, active: bool, category_id: uuid.UUID | None
     ) -> None:
@@ -83,6 +87,7 @@ class ItemsRepo:
         )
         return [{'id': str(r['id']), 'name': r['name']} for r in rows]
 
+    # TODO: remove as deprecated
     async def create_category(self, *, name: str) -> None:
         await self._conn.execute(
             """
@@ -93,6 +98,7 @@ class ItemsRepo:
             name.strip(),
         )
 
+    # TODO: remove as deprecated
     async def rename_category(self, *, category_id: uuid.UUID, name: str) -> None:
         await self._conn.execute(
             """

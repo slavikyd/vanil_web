@@ -26,6 +26,7 @@ create table orders (
     created timestamp default now(),
     shop_id text REFERENCES shops (id),
     cashier_id text REFERENCES cashiers (id),
+    comment text,
     address text
 );
 

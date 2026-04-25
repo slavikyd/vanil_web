@@ -20,11 +20,11 @@ class OrderService:
         *,
         uow: AsyncpgUnitOfWork,
         cashier_id: str,
-        shop_id: str | None,
+        shop_id: str | None, # TODO REMOVE THE NONE!
         cart: dict[str, int],
         order_for: str,
         store_name: str | None = None,
-        comments: dict[str, str] | None = None,
+        comments: dict[str, str],
     ) -> uuid.UUID:
         if not cart:
             raise EmptyCartError()
