@@ -55,12 +55,12 @@ class OrdersRepo:
         self,
         order_id: uuid.UUID,
         cart: dict[str, int],
-        comment: dict[str, str],
+        comments: dict[str, str],
     ) -> None:
 
         item_ids = [uuid.UUID(item_id) for item_id in cart]
         quantities = list(cart.values())
-        notes = [(comment.get(item_id) or '').strip() or None for item_id in cart]
+        notes = [(comments.get(item_id) or '').strip() or None for item_id in cart]
 
         await self._conn.executemany(
             """
