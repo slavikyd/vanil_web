@@ -112,7 +112,8 @@ async def place_order(
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
     order_for: str = Form(...),
     store_name: str | None = Form(None),
-    tg_id: str | None = Form(None),
+    tg_id: str | None = Form(None), #TODO: DERPRACATED
+    comment: str | None = Form(None),
 ):
     session = request.session
 
@@ -128,7 +129,7 @@ async def place_order(
     shop_id = None
 
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
-    comment = await CartService.get_comments(
+    comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
     )
 
@@ -141,6 +142,7 @@ async def place_order(
             order_for=order_for,
             store_name=store_name,
             comment=comment,
+            comments=comments,
         )
     except EmptyCartError:
         return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
