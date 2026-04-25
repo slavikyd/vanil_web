@@ -140,7 +140,7 @@ async def place_order(
             cart=cart,
             order_for=order_for,
             store_name=store_name,
-            comments=comments,
+            comment=comments,
         )
     except EmptyCartError:
         return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
