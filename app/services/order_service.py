@@ -23,8 +23,8 @@ class OrderService:
         shop_id: str | None, # TODO REMOVE THE NONE!
         cart: dict[str, int],
         order_for: str,
-        store_name: str | None = None,
-        comments: dict[str, str],
+        store_name: str,
+        comment: dict[str, str],
     ) -> uuid.UUID:
         if not cart:
             raise EmptyCartError()
@@ -46,9 +46,10 @@ class OrderService:
                 shop_id=shop_id,
                 address=address,
                 order_for=order_for_date,
+                comment=comment
             )
             await uow.orders.add_items(
-                order_id=order_id, cart=cart, comments=comments
+                order_id=order_id, cart=cart, comment=comment
             )
 
         return order_id

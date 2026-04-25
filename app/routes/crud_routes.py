@@ -128,7 +128,7 @@ async def place_order(
     shop_id = None
 
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
-    comments = await CartService.get_comments(
+    comment = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
     )
 
@@ -140,7 +140,7 @@ async def place_order(
             cart=cart,
             order_for=order_for,
             store_name=store_name,
-            comment=comments,
+            comment=comment,
         )
     except EmptyCartError:
         return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
