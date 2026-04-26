@@ -7,9 +7,17 @@ create table shops (
     address text -- TODO: do it the smarter way
     
 );
+
+CREATE TABLE categories (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name text NOT NULL UNIQUE
+);
+
 create table items (
 	id uuid primary key default uuid_generate_v4(),
-    name text
+    name text,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    category uuid REFERENCES categories (id)
 );
 
 
@@ -27,6 +35,7 @@ create table orders (
     shop_id text REFERENCES shops (id),
     cashier_id text REFERENCES cashiers (id),
     comment text,
+    order_for date NOT NULL DEFAULT CURRENT_DATE,
     address text
 );
 
