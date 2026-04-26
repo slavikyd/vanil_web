@@ -62,12 +62,15 @@ class OrdersRepo:
         quantities = list(cart.values())
         notes = [(comments.get(item_id) or '').strip() or None for item_id in cart]
 
-        await self._conn.executemany(
+        await self._conn.execute(
             """
             INSERT INTO orders_items (order_id, item_id, quantity, comment)
-            VALUES ($1, $2, $3, $4)
+            SELECT $1, unnest($2::uuid[]), unnest($3::int[]), unnest($4::text[])
             """,
-            [(order_id, item_id, qty, note) for item_id, qty, note in zip(item_ids, quantities, notes)],
+            order_id,
+            item_ids,
+            quantities,
+            notes,
         )
 
     async def list_orders_for_view(self) -> list[dict]:
