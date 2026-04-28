@@ -6,6 +6,7 @@
 #   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
 import uuid
+
 from django.db import models
 
 
@@ -71,6 +72,8 @@ class Items(models.Model):
     name = models.TextField(blank=True, null=True)
     active = models.BooleanField()
     category = models.ForeignKey(Categories, models.DO_NOTHING, db_column='category', blank=True, null=True)
+    tbl = models.IntegerField(null=True, blank=True)
+    pos = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -87,6 +90,7 @@ class Orders(models.Model):
     cashier = models.ForeignKey(Cashiers, models.DO_NOTHING, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     order_for = models.DateField()
+    comment = models.TextField(null=True, blank=True, max_length=255)
 
     class Meta:
         managed = True
@@ -98,6 +102,7 @@ class OrdersItems(models.Model):
     order = models.ForeignKey(Orders, models.DO_NOTHING)
     item = models.ForeignKey(Items, models.DO_NOTHING)
     quantity = models.IntegerField(blank=True, null=True)
+    comment = models.TextField(null=True, blank=True, max_length=100)
 
     class Meta:
         managed = True

@@ -113,14 +113,36 @@
 
   function renderTotalsGrid(dayIso, totals) {
     const total = totals.length;
-    const columns = Math.min(4, Math.max(1, Math.ceil(total / 18)));
-    const rowsPerColumn = Math.ceil(total / columns);
+
+    // depreacated
+    // const columns = Math.min(4, Math.max(1, Math.ceil(total / 18)));
+    // const rowsPerColumn = Math.ceil(total / columns);
+
+
+    // the manual grid 
+    const columns = [[], [], [], []];
+    const unassigned = [];
+
 
     const grid = el('div', { class: 'totals-grid' });
     const store = readStockStore();
 
-    for (let i = 0; i < columns; i++) {
-      const chunk = totals.slice(i * rowsPerColumn, (i + 1) * rowsPerColumn);
+    for (const t of totals) {
+      if (t.tbl !== null && t.tbl !== undefined && t.pos !== null && t.pos !== undefined) {
+        const col = columns[t.tbl];
+        if (col) col.push(t);
+      } else {
+        unassigned.push(t);
+      }
+    }
+
+    for (let i = 0; i < 4; i++) {
+      columns[i].sort((a, b) => a.pos - b.pos);
+    }
+    columns[3].push(...unassigned);
+
+    for (let i = 0; i < 4; i++) {
+      const chunk = columns[i];
       if (!chunk.length) continue;
 
       const table = el('table', { class: 'lo-table' });

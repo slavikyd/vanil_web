@@ -1,5 +1,6 @@
 import logging
 import os
+
 from app.redis import redis
 
 logger = logging.getLogger(__name__)

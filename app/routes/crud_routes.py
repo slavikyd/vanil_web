@@ -1,6 +1,7 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from datetime import date
 
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork

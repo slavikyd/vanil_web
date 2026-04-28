@@ -1,6 +1,6 @@
 import logging
-import time
 import os
+import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
 

@@ -4,7 +4,8 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, Form, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
+                               StreamingResponse)
 
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_uow

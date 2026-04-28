@@ -10,10 +10,9 @@ from django.template.response import TemplateResponse
 from django.urls import path, re_path
 from django.utils import timezone
 from django.utils.dateparse import parse_date
-
-from .models import *
 from openpyxl import Workbook
 
+from .models import *
 
 # TODO: consider move to plain SQL 
 
@@ -24,10 +23,12 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
     max_days=5, offset_days=0  → newest 5 days  (live page)
     max_days=None, offset_days=5 → everything older (archive)
     """
-    all_item_names = list(
-        Items.objects.order_by("name").values_list("name", flat=True)
+    all_items = list(
+        Items.objects
+        .order_by("tbl", "pos", "name")
+        .values("name", "tbl", "pos")
     )
-    all_item_names = [n for n in all_item_names if n]
+    all_items = [i for i in all_items if i["name"]]
 
     order_items_prefetch = (
         OrdersItems.objects
@@ -58,7 +59,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             reverse=True,
         )
 
-        totals: dict[str, int] = {name: 0 for name in all_item_names}
+        totals: dict[str, int] = {i["name"]: 0 for i in all_items}
         shops_map: dict[str, list] = {}
 
         for o in day_orders:
@@ -71,8 +72,8 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
                     totals[name] = totals.get(name, 0) + int(oi.quantity or 0)
 
         totals_list = [
-            {"name": n, "quantity": totals.get(n, 0)}
-            for n in sorted(totals.keys())
+            {"name": i["name"], "quantity": totals.get(i["name"], 0), "tbl": i["tbl"], "pos": i["pos"]}
+            for i in all_items
         ]
 
         shops_payload = []
@@ -227,8 +228,8 @@ class CategoriesAdmin(admin.ModelAdmin):
 
 @admin.register(Items)
 class ItemsAdmin(admin.ModelAdmin):
-    list_display = ["name", "active", "category"]
-    list_editable = ["active", "category"]
+    list_display = ["name", "active", "category", 'tbl', 'pos']
+    list_editable = ["active", "category", 'tbl', 'pos']
 
 @admin.register(Shops)
 class ShopsAdmin(admin.ModelAdmin):

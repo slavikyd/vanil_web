@@ -1,8 +1,9 @@
 import uuid
 from datetime import date
+from typing import Literal
 
 from asyncpg import Connection
-from typing import Literal
+
 
 class OrdersRepo:
     def __init__(self, conn: Connection):

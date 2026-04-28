@@ -7,11 +7,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.db import connect_db
-from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.logging import setup_logging
+from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.redis import redis
 from app.routes import crud_routes, extra_routes
-
 
 logger = logging.getLogger(__name__)
 
