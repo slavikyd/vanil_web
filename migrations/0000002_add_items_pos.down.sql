@@ -1,1 +1,2 @@
-alter table items drop column pos, tbl;
+alter table items drop column pos;
+alter table items drop column tbl;
