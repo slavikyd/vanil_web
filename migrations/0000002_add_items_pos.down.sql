@@ -1,2 +1,2 @@
-alter table items drop column pos if exists;
-alter table items drop column tbl if exists;
+alter table if exists items drop column pos;
+alter table if exists items drop column tbl;
