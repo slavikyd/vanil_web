@@ -53,7 +53,7 @@ services:
       - -c
       - |
         set -e
-        poetry run python manage.py migrate --noinput
+        poetry run python manage.py migrate --fake-initial --noinput
         exec poetry run python manage.py runserver 0.0.0.0:8001
 
   # frontend:
