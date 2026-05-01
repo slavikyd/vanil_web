@@ -57,21 +57,23 @@ class OrdersRepo:
         order_id: uuid.UUID,
         cart: dict[str, int],
         comments: dict[str, str],
+        order_types: dict[str, str],
     ) -> None:
 
         item_ids = [uuid.UUID(item_id) for item_id in cart]
         quantities = list(cart.values())
         notes = [(comments.get(item_id) or '').strip() or None for item_id in cart]
-
+        types = [order_types.get(item_id) or 'Обычный' for item_id in cart]
         await self._conn.execute(
             """
-            INSERT INTO orders_items (order_id, item_id, quantity, comment)
-            SELECT $1, unnest($2::uuid[]), unnest($3::int[]), unnest($4::text[])
+            INSERT INTO orders_items (order_id, item_id, quantity, comment, order_type)
+            SELECT $1, unnest($2::uuid[]), unnest($3::int[]), unnest($4::text[]), unnest($5::text[])
             """,
             order_id,
             item_ids,
             quantities,
             notes,
+            types,
         )
 
     async def list_orders_for_view(self) -> list[dict]:

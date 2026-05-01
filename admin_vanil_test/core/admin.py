@@ -59,7 +59,8 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             reverse=True,
         )
 
-        totals: dict[str, int] = {i["name"]: 0 for i in all_items}
+        totals_shop: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
         shops_map: dict[str, list] = {}
 
         for o in day_orders:
@@ -69,10 +70,13 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             for oi in o.ordersitems_set.all():
                 name = getattr(oi.item, "name", None)
                 if name:
-                    totals[name] = totals.get(name, 0) + int(oi.quantity or 0)
+                    if getattr(oi, 'order_type', 'Обычный') == 'Спец. заказ':
+                        totals_special[name] = totals_special.get(name, 0) + int(oi.quantity or 0)
+                    else:
+                        totals_shop[name] = totals_shop.get(name, 0) + int(oi.quantity or 0)
 
         totals_list = [
-            {"name": i["name"], "quantity": totals.get(i["name"], 0), "tbl": i["tbl"], "pos": i["pos"]}
+            {"name": i["name"], "quantity_shop": totals_shop.get(i["name"], 0), "quantity_special": totals_special.get(i['name'], 0), "tbl": i["tbl"], "pos": i["pos"]}
             for i in all_items
         ]
 

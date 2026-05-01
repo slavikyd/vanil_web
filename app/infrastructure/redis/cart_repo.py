@@ -13,6 +13,27 @@ class RedisCartRepo:
     def _comments_key(self, session_id: str) -> str:
         return f'cart_comments:{session_id}'
 
+    def _order_types_key(self, session_id: str) -> str:
+        return f'cart_order_types:{session_id}'
+    
+    async def get_order_types(self, *, session_id: str) -> dict[str, str]:
+        try:
+            raw = await redis.hgetall(self._order_types_keys(session_id))
+            return {k: str(v) for k, v in raw.items()}
+        except Exception as e:
+            logger.warning(f'Failed to read cart order types from Redis: {e}')
+            return {}
+
+    async def set_order_type(self, *, session_id: str, item_id: str, order_type: str) -> None:
+        key = self._order_types_keys(session_id)
+        cart_key = self._key(session_id)
+        try:
+            await redis.hset(key, item_id, order_type)
+            await redis.expire(key, CART_TTL_SECONDS)
+            await redis.expire(cart_key, CART_TTL_SECONDS)
+        except Exception as e:
+            logger.warning(f'Failed to update cart order type in Redis: {e}')
+
     async def get_cart(self, *, session_id: str) -> dict[str, int]:
         try:
             raw = await redis.hgetall(self._key(session_id))
@@ -60,5 +81,7 @@ class RedisCartRepo:
         try:
             await redis.delete(self._key(session_id))
             await redis.delete(self._comments_key(session_id))
+            await redis.delete(self._order_types_key(session_id))
+
         except Exception as e:
             logger.warning(f'Failed to clear cart in Redis: {e}')

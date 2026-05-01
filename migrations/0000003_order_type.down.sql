@@ -1,0 +1,1 @@
+alter table orders_items drop column order_type;

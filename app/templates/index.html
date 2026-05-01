@@ -103,6 +103,10 @@
                     <button type="button" class="quantity-plus" data-item-id="{{ item.id }}">+</button>
                 </div>
                 <button type="button" class="item-comment-toggle" data-item-id="{{ item.id }}" title="Комментарий">✎</button>
+                <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:#ccc; flex:0 0 auto;">
+                    <input type="checkbox" class="item-order-type" data-item-id="{{ item.id }}">
+                    Спец. заказ
+                </label>
             </div>
             <div class="item-comment-panel" id="comment-panel-{{ item.id }}" hidden>
                 <textarea class="item-comment-input" data-item-id="{{ item.id }}" maxlength="500" rows="2" placeholder="Комментарий к позиции">{{ (comments or {}).get(item.id|string, '') }}</textarea>
@@ -181,6 +185,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    
+    
     async function sendComment(itemId, text) {
         const formData = new FormData();
         formData.append('itemid', itemId);
@@ -193,6 +199,15 @@ document.addEventListener('DOMContentLoaded', () => {
             renderOrder(json.cart, json.items_data, json.comments);
             applyCommentInputs(json.comments);
         }
+    }
+
+    async function sendOrderType(itemId, isSpecial){
+        const formData = new FormData();
+        formData.append('item_id', itemId);
+        formData.append('order_type', isSpecial ? 'Спец. заказ' : 'Обычный');
+        const tgId = getTgId();
+        if (tgId) formData.append('tg_id', tgId);
+        await fetch('/set-order-type', { method: 'POST', body: formData });
     }
 
     function renderOrder(cart, items, comments) {
@@ -261,6 +276,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 450);
     });
 
+    document.addEventListener('change', (e) => {
+        const cb = e.target.closest('.item-order-type');
+        if (!cb) return;
+        sendOrderType(cb.dataset.itemId, cb.checked);
+    })
+
     orderList.addEventListener('click', (e) => {
         const li = e.target.closest('.cart-item');
         if (!li) return;
@@ -277,6 +298,8 @@ document.addEventListener('DOMContentLoaded', () => {
             sendUpdate(id, 0);
         }
     });
+
+
 
     selectors.forEach(s => {
         const input = s.querySelector('input');

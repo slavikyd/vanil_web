@@ -133,6 +133,7 @@ async def place_order(
     comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
     )
+    order_types = await cart_repo.get_order_types(session_id=session_id)
 
     try:
         await OrderService.create_order(
@@ -144,6 +145,7 @@ async def place_order(
             store_name=store_name,
             comment=comment,
             comments=comments,
+            order_types=order_types,
         )
     except EmptyCartError:
         return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
@@ -212,3 +214,18 @@ async def orders_future_view(
         'orders_future.html',
         {'request': request, 'future_orders': grouped},
     )
+
+@router.post('/set-order-type')
+async def set_order_type(
+    request: Request,
+    cart_repo: RedisCartRepo = Depends(get_cart_repo),
+    item_id: str = Form(...),
+    order_type: str = Form('Обычный'),
+):
+    session_id = get_or_create_session_id(request.session)
+    await cart_repo.set_order_type(
+        session_id=session_id,
+        item_id=item_id,
+        order_type=order_type,
+    )
+    return JSONResponse({'ok': True})

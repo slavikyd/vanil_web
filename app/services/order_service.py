@@ -15,6 +15,7 @@ class InvalidOrderDateError(Exception):
 class OrderService:
     DEFAULT_TEST_ADDRESS = 'Тестовая улица 1'
 
+    
     @staticmethod
     async def create_order(
         *,
@@ -26,6 +27,8 @@ class OrderService:
         store_name: str,
         comment: dict[str, str],
         comments: dict[str, str],
+        order_types: dict[str, str],
+
     ) -> uuid.UUID:
         if not cart:
             raise EmptyCartError()
@@ -50,7 +53,7 @@ class OrderService:
                 comment=comment
             )
             await uow.orders.add_items(
-                order_id=order_id, cart=cart, comments=comments
+                order_id=order_id, cart=cart, comments=comments, order_types=order_types,
             )
 
         return order_id

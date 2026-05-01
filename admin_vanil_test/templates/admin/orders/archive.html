@@ -148,18 +148,20 @@
       const table = el('table', { class: 'lo-table' });
       const thead = el('thead');
       const trh = el('tr');
-      ['Позиция', 'Не хватает', 'Заказано', 'Остаток'].forEach(h => trh.appendChild(el('th', { text: h })));
+      ['Позиция', 'Не хватает', 'Заказ', 'Заявка с магазина', 'Остаток'].forEach(h => trh.appendChild(el('th', { text: h })));
       thead.appendChild(trh);
       table.appendChild(thead);
 
       const tbody = el('tbody');
       for (const t of chunk) {
-        const ordered = Number(t.quantity || 0);
+        const ordered_shop = Number(t.quantity_shop || 0);
+        const ordered_special = Number(t.quantity_special || 0);
         const tr = el('tr', { 'data-day': dayIso, 'data-item': t.name });
         const tdName = el('td', { text: t.name });
 
         const missingTd = el('td', { class: 'num' });
-        const orderedTd = el('td', { class: 'num', text: String(ordered) });
+        const specialTd = el('td', { class: 'num', text: String(ordered_special) });
+        const orderedTd = el('td', { class: 'num', text: String(ordered_shop) });
 
         const k = stockKey(dayIso, t.name);
         const stored = Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null;
@@ -170,8 +172,11 @@
         function recompute() {
           const parsed = parseStockInput(stockInput.value);
           const stock = (parsed === null) ? 0 : parsed;
-          const missing = Math.max(0, ordered - stock);
+          const total = ordered_shop + ordered_special;
+          const missing = Math.max(0, total - stock);
+          const remainder = total - stock;
           missingTd.textContent = String(missing);
+          remainderTd.textContent = String(remainder);
         }
 
         recompute();
@@ -185,13 +190,16 @@
           recompute();
         });
 
+        const remainderTd = el('td', { class: 'num' });
         const stockTd = el('td');
         stockTd.appendChild(stockInput);
 
         tr.appendChild(tdName);
         tr.appendChild(missingTd);
+        tr.appendChild(specialTd);
         tr.appendChild(orderedTd);
         tr.appendChild(stockTd);
+        tr.appendChild(remainderTd);
         tbody.appendChild(tr);
       }
       table.appendChild(tbody);
