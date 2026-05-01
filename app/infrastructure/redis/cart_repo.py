@@ -25,7 +25,7 @@ class RedisCartRepo:
             return {}
 
     async def set_order_type(self, *, session_id: str, item_id: str, order_type: str) -> None:
-        key = self._order_types_keys(session_id)
+        key = self._order_types_key(session_id)
         cart_key = self._key(session_id)
         try:
             await redis.hset(key, item_id, order_type)
