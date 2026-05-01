@@ -103,6 +103,8 @@ class OrdersItems(models.Model):
     item = models.ForeignKey(Items, models.DO_NOTHING)
     quantity = models.IntegerField(blank=True, null=True)
     comment = models.TextField(null=True, blank=True, max_length=100)
+    order_type = models.TextField(default='Обычный')
+
 
     class Meta:
         managed = True
