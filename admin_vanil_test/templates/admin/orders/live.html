@@ -313,6 +313,7 @@
       renderDays(payload);
       statusEl.textContent = `Обновлено: ${nowTimeRu()}`;
     } catch (e) {
+      console.error(e);
       statusEl.textContent = 'Ошибка обновления. Нажмите «Обновить» чтобы повторить.';
     }
   }

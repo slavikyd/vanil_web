@@ -33,7 +33,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
     order_items_prefetch = (
         OrdersItems.objects
         .select_related("item")
-        .only("order_id", "item_id", "quantity", "item__name")
+        .only("order_id", "item_id", "quantity", 'order_type', "item__name")
     )
     orders_qs = (
         Orders.objects

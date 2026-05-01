@@ -1,4 +1,4 @@
-"""Admin's routes."""
+"""Admin's routes.""" # DEPRECATED
 
 import uuid
 from datetime import date
