@@ -169,6 +169,9 @@
         const stockInput = el('input', { type: 'number', min: '0', step: '1' });
         if (stockVal !== null && Number.isFinite(stockVal)) stockInput.value = String(stockVal);
 
+
+        const remainderTd = el('td', { class: 'num' });
+        
         function recompute() {
           const parsed = parseStockInput(stockInput.value);
           const stock = (parsed === null) ? 0 : parsed;
@@ -190,7 +193,7 @@
           recompute();
         });
 
-        const remainderTd = el('td', { class: 'num' });
+        
         const stockTd = el('td');
         stockTd.appendChild(stockInput);
 
