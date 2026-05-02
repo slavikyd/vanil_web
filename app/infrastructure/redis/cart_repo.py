@@ -18,7 +18,7 @@ class RedisCartRepo:
     
     async def get_order_types(self, *, session_id: str) -> dict[str, str]:
         try:
-            raw = await redis.hgetall(self._order_types_keys(session_id))
+            raw = await redis.hgetall(self._order_types_key(session_id))
             return {k: str(v) for k, v in raw.items()}
         except Exception as e:
             logger.warning(f'Failed to read cart order types from Redis: {e}')
