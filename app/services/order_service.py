@@ -3,7 +3,8 @@ from datetime import datetime
 
 from app.infrastructure.uow import AsyncpgUnitOfWork
 
-
+import logging
+logger = logging.getLogger(__name__)
 class EmptyCartError(Exception):
     pass
 
@@ -37,7 +38,7 @@ class OrderService:
             order_for_date = datetime.strptime(order_for, '%Y-%m-%d').date()
         except ValueError:
             raise InvalidOrderDateError()
-
+        logger.info('creating order', extra={'cashier_id': cashier_id, 'order_for': order_for, 'cart_size': len(cart)})
         assert uow.orders is not None
 
         order_id = uuid.uuid4()
@@ -55,5 +56,5 @@ class OrderService:
             await uow.orders.add_items(
                 order_id=order_id, cart=cart, comments=comments, order_types=order_types,
             )
-
+        logger.info('order created', extra={'cashier_id': cashier_id, 'order_id': str(order_id), 'order_for': str(order_for_date)})
         return order_id

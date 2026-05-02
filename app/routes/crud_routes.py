@@ -14,6 +14,7 @@ from app.services.public_service import PublicService
 from app.settings.config import templates
 
 router = APIRouter(tags=['crud'])
+logger = logging.getLogger(__name__)
 
 def group_orders_by_day(rows: list[dict]) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = {}
@@ -54,6 +55,8 @@ async def add_to_cart(
         item_id=itemid,
         quantity=quantity,
     )
+    logger.debug('cart item updated', extra={'session_id': session_id, 'item_id': itemid, 'quantity': quantity}) # TODO: possibly remove this debugging log message
+    
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
     comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
@@ -130,11 +133,12 @@ async def place_order(
     shop_id = None
 
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
+    logger.info('placing order', extra={'cashier_id': cashier_id, 'cart_size': len(cart), 'order_for': order_for})
     comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
     )
     order_types = await cart_repo.get_order_types(session_id=session_id)
-    logging.getLogger(__name__).warning(f'DEBUG: order_types: {order_types}')
+    # logging.getLogger(__name__).warning(f'DEBUG: order_types: {order_types}')
 
     try:
         await OrderService.create_order(
@@ -149,14 +153,17 @@ async def place_order(
             order_types=order_types,
         )
     except EmptyCartError:
+        logger.warning('order attempt with empty cart', extra={'cashier_id': cashier_id})
         return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
     except InvalidOrderDateError:
+        logger.exception('order creation failed: impossible date', extra={'cashier_id': cashier_id, 'date': order_for})
         return HTMLResponse('Invalid order date', status_code=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
+        logger.exception('order creation failed', extra={'cashier_id': cashier_id, 'error': str(e)})
         return HTMLResponse(
             f'Failed to create order: {e}', status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
+    logger.info('order placed successfully', extra={'cashier_id': cashier_id, 'order_for': order_for})
     await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
     return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 

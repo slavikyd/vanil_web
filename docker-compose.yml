@@ -56,19 +56,6 @@ services:
         poetry run python manage.py migrate --fake-initial --noinput
         exec poetry run python manage.py runserver 0.0.0.0:8001
 
-  # frontend:
-  #   image: node:20-alpine
-  #   working_dir: /app
-  #   command: npm run dev
-  #   ports:
-  #     - "3000:3000"
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #   depends_on:
-  #     - web
-  #   environment:
-  #     - VITE_API_URL=http://web:8000
 
 
   nginx:
@@ -94,6 +81,39 @@ services:
       DATABASE_URL: ${DB_URL_MIGRATIONS}
     command: >
       poetry run yoyo apply --batch --database ${DB_URL_MIGRATIONS} migrations
+  
+  loki:
+    image: grafana/loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      - GF_SERVER_ROOT_URL=https://xn--90aioe3a8b4a.xn--p1ai/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - loki
+    expose:
+      - "3000"
 
 volumes:
   db_data:
+  loki_data:
+  grafana_data:
+
