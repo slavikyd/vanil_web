@@ -170,16 +170,13 @@
         if (stockVal !== null && Number.isFinite(stockVal)) stockInput.value = String(stockVal);
 
 
-        const remainderTd = el('td', { class: 'num' });
         
         function recompute() {
           const parsed = parseStockInput(stockInput.value);
           const stock = (parsed === null) ? 0 : parsed;
           const total = ordered_shop + ordered_special;
-          const missing = Math.max(0, total - stock);
-          const remainder = total - stock;
+          const missing = total - stock;
           missingTd.textContent = String(missing);
-          remainderTd.textContent = String(remainder);
         }
 
         recompute();
@@ -202,7 +199,6 @@
         tr.appendChild(specialTd);
         tr.appendChild(orderedTd);
         tr.appendChild(stockTd);
-        tr.appendChild(remainderTd);
         tbody.appendChild(tr);
       }
       table.appendChild(tbody);

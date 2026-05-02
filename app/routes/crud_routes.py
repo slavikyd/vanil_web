@@ -1,5 +1,5 @@
 from datetime import date
-
+import logging
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
@@ -134,6 +134,7 @@ async def place_order(
         cart_repo=cart_repo, session_id=session_id
     )
     order_types = await cart_repo.get_order_types(session_id=session_id)
+    logging.getLogger(__name__).warning(f'DEBUG: order_types: {order_types}')
 
     try:
         await OrderService.create_order(
