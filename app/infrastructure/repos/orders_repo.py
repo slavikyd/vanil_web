@@ -120,22 +120,26 @@ class OrdersRepo:
             args.append(f'%{address}%')
             idx += 1
 
-        wheresql = f'WHERE {' AND '.join(where)}' if where else ''
+        wheresql = f'WHERE {" AND ".join(where)}' if where else ''
 
         rows = await self._conn.fetch(
             f"""
             SELECT
-              o.id AS order_id,
-              o.order_for,
-              o.created,
-              o.address,
-              c.full_name AS cashier_name,
-              oi.quantity,
-              i.name AS item_name
+            o.id AS order_id,
+            o.order_for,
+            o.created,
+            o.address,
+            c.full_name AS cashier_name,
+            oi.quantity,
+            oi.order_type,
+            i.name AS item_name,
+            sg.name AS group_name
             FROM orders o
             JOIN cashiers c ON o.cashier_id = c.id
             JOIN orders_items oi ON oi.order_id = o.id
             JOIN items i ON oi.item_id = i.id
+            LEFT JOIN shops s ON o.shop_id = s.id
+            LEFT JOIN shops_groups sg ON s.shop_group = sg.id
             {wheresql}
             ORDER BY o.order_for DESC, o.created DESC
             """,
@@ -151,6 +155,8 @@ class OrdersRepo:
                 'cashier_name': r['cashier_name'],
                 'item_name': r['item_name'],
                 'quantity': r['quantity'],
+                'order_type': r['order_type'],
+                'group_name': r['group_name'],  
             }
             for r in rows
         ]

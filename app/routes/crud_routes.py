@@ -2,7 +2,7 @@ from datetime import date
 import logging
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-
+import uuid
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow
@@ -56,7 +56,7 @@ async def add_to_cart(
         quantity=quantity,
     )
     logger.debug('cart item updated', extra={'session_id': session_id, 'item_id': itemid, 'quantity': quantity}) # TODO: possibly remove this debugging log message
-    
+
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
     comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
@@ -115,7 +115,7 @@ async def place_order(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
     order_for: str = Form(...),
-    store_name: str | None = Form(None),
+    shop_id: uuid.UUID = Form(...),
     tg_id: str | None = Form(None), #TODO: DERPRACATED
     comment: str | None = Form(None),
 ):
@@ -129,8 +129,6 @@ async def place_order(
     if not session_id:
         return HTMLResponse('Invalid session', status_code=status.HTTP_400_BAD_REQUEST)
 
-    # Temporarily decouple order creation from Telegram shop id.
-    shop_id = None
 
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
     logger.info('placing order', extra={'cashier_id': cashier_id, 'cart_size': len(cart), 'order_for': order_for})
@@ -147,7 +145,6 @@ async def place_order(
             shop_id=shop_id,
             cart=cart,
             order_for=order_for,
-            store_name=store_name,
             comment=comment,
             comments=comments,
             order_types=order_types,
@@ -158,6 +155,10 @@ async def place_order(
     except InvalidOrderDateError:
         logger.exception('order creation failed: impossible date', extra={'cashier_id': cashier_id, 'date': order_for})
         return HTMLResponse('Invalid order date', status_code=status.HTTP_400_BAD_REQUEST)
+    except ValueError as e:
+        logger.warning('order creation failed: invalid shop', extra={'cashier_id': cashier_id, 'error': str(e)})
+        return HTMLResponse(str(e), status_code=status.HTTP_400_BAD_REQUEST)
+
     except Exception as e:
         logger.exception('order creation failed', extra={'cashier_id': cashier_id, 'error': str(e)})
         return HTMLResponse(

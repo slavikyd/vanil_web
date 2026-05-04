@@ -2,7 +2,7 @@ Create EXTENSION if not EXISTS "uuid-ossp";
 
 
 create table shops (
-    id text primary key,
+    id uuid PRIMARY key DEFAULT uuid_generate_v4(),
     phone_number text,
     address text -- TODO: do it the smarter way
     
@@ -32,7 +32,7 @@ create table cashiers (
 create table orders (
     id uuid primary key default uuid_generate_v4(),
     created timestamp default now(),
-    shop_id text REFERENCES shops (id),
+    shop_id uuid REFERENCES shops (id),
     cashier_id text REFERENCES cashiers (id),
     comment text,
     order_for date NOT NULL DEFAULT CURRENT_DATE,

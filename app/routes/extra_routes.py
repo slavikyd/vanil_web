@@ -1,4 +1,5 @@
 import time
+import uuid
 
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -20,6 +21,7 @@ async def index(
     request: Request,
     uow: AsyncpgUnitOfWork = Depends(get_uow),
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
+    shop_id: uuid.UUID | None = None,
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
@@ -35,6 +37,7 @@ async def index(
         cart_repo=cart_repo,
         cashier_id=cashier_id,
         session_id=session_id,
+        preselected_shop_id=shop_id,
     )
     return templates.TemplateResponse('index.html', {'request': request, **ctx})
 

@@ -110,11 +110,22 @@ class OrdersItems(models.Model):
         managed = True
         db_table = 'orders_items'
 
+class ShopsGroups(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    name = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return self.name or str(self.id)
+
+    class Meta:
+        managed = True
+        db_table = 'shops_groups'
 
 class Shops(models.Model):
     id = models.TextField(primary_key=True)
     phone_number = models.TextField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
+    shop_group = models.ForeignKey(ShopsGroups, models.DO_NOTHING, blank=True, null=True)
 
     def __str__(self):
         return self.address

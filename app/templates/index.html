@@ -83,8 +83,22 @@
 <input type="date" id="order_for" name="order_for" required>
 <br><br>
 
-<label for="store_name">Магазин (временно):</label><br>
-<input type="text" id="store_name" name="store_name" placeholder="Например, Магазин на Ленина">
+<!-- <label for="store_name">Магазин (временно):</label><br>
+<input type="text" id="store_name" name="store_name" placeholder="Например, Магазин на Ленина"> -->
+<label for="shop_id">Магазин:</label><br>
+<select id="shop_id" name="shop_id" required {% if preselected_shop_id %}disabled{% endif %}>
+    {% if not preselected_shop_id %}
+    <option value="" disabled selected>Выберите магазин</option>
+    {% endif %}
+    {% for shop in shops %}
+    <option value="{{ shop.id }}" {% if preselected_shop_id == shop.id|string %}selected{% endif %}>
+        {{ shop.address }}
+    </option>
+    {% endfor %}
+</select>
+{% if preselected_shop_id %}
+<input type="hidden" name="shop_id" value="{{ preselected_shop_id }}">
+{% endif %}
 <div id="dateError" style="color: red; margin-top: 0.5em;"></div>
 <br>
 
@@ -154,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderList = document.querySelector('.items-list');
     let commentTimers = {};
 
-    window.getTgId = () => document.querySelector('input[name="tg_id"]')?.value || null;
+    // window.getTgId = () => document.querySelector('input[name="tg_id"]')?.value || null;
 
     function applyCommentInputs(comments) {
         if (!comments) return;
@@ -171,8 +185,8 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('itemid', itemId);
         formData.append('quantity', qty);
 
-        const tgId = getTgId();
-        if (tgId) formData.append('tg_id', tgId);
+        // const tgId = getTgId();
+        // if (tgId) formData.append('tg_id', tgId);
 
         const resp = await fetch('/add-to-cart', { method: 'POST', body: formData });
         if (resp.ok) {
