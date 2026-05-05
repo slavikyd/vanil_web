@@ -50,7 +50,7 @@ create table orders_items (
 
 
 create table shops_orders (
-    shop_id text REFERENCES shops (id),
+    shop_id uuid REFERENCES shops (id),
     order_id uuid REFERENCES orders (id),
     PRIMARY key(shop_id, order_id)
 );
