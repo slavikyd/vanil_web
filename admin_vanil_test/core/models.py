@@ -125,7 +125,7 @@ class Shops(models.Model):
     id = models.TextField(primary_key=True)
     phone_number = models.TextField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
-    shop_group = models.ForeignKey(ShopsGroups, models.DO_NOTHING, blank=True, null=True)
+    shop_group = models.ForeignKey(ShopsGroups, models.DO_NOTHING, blank=True, null=True, db_column='shop_group')
 
     def __str__(self):
         return self.address
