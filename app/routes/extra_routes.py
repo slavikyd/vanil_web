@@ -94,3 +94,12 @@ async def get_data_json(
         session_id=session_id,
     )
     return JSONResponse(data)
+
+@router.get('/api/shop-by-device')
+async def shop_by_device(
+    android_id: str,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    assert uow.shops is not None
+    shop_id = await uow.shops.find_by_android_id(android_id=android_id)
+    return JSONResponse({'shop_id': str(shop_id) if shop_id else None})
