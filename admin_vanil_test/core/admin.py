@@ -65,10 +65,26 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
         totals_priority: dict[str, int] = {i['name']: 0 for i in all_items}
         shops_map: dict[str, list] = {}
 
-        is_priority = (
-            getattr(getattr(o, "shop", None), "shop_group", None) is not None
-            and getattr(getattr(o.shop, "shop_group", None), "name", None) == PRIORITY_GROUP_NAME
-        )
+        for o in day_orders:
+            shop_key = o.address or getattr(o, "shop_id", None) or "Unknown shop"
+            shops_map.setdefault(shop_key, []).append(o)
+
+            is_priority = (
+                getattr(getattr(o, "shop", None), "shop_group", None) is not None
+                and getattr(getattr(o.shop, "shop_group", None), "name", None) == PRIORITY_GROUP_NAME
+            )
+
+            for oi in o.ordersitems_set.all():
+                name = getattr(oi.item, "name", None)
+                if not name:
+                    continue
+                qty = int(oi.quantity or 0)
+                if is_priority:
+                    totals_priority[name] = totals_priority.get(name, 0) + qty
+                elif getattr(oi, "order_type", "Обычный") == "Спец. заказ":
+                    totals_special[name] = totals_special.get(name, 0) + qty
+                else:
+                    totals_shop[name] = totals_shop.get(name, 0) + qty
 
         for oi in o.ordersitems_set.all():
             name = getattr(oi.item, "name", None)
