@@ -5,7 +5,7 @@ class ShopsRepo:
     def __init__(self, conn: Connection):
         self._conn = conn
 
-    async def get_address(self, *, shop_id: str) -> str | None:
+    async def get_address(self, *, shop_id: uuid.UUID) -> str | None:
         row = await self._conn.fetchrow(
             'SELECT address FROM shops WHERE id = $1', shop_id
         )
@@ -44,7 +44,7 @@ class ShopsRepo:
         )
         return [{'id': r['id'], 'address': r['address']} for r in rows]
     
-    async def find_by_android_id(self, * android_id: str) -> str | None:
+    async def find_by_android_id(self, android_id: str) -> str | None:
         row = await self._conn.fetchrow(
             'SELECT id FROM shops WHERE android_id = $1', android_id
         )
