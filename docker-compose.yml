@@ -12,6 +12,11 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # rabbitmq:
   #   image: rabbitmq
@@ -30,7 +35,8 @@ services:
     volumes:
       - .:/code
     depends_on:
-      - db
+      db:
+        condition: service_healthy
       # - rabbitmq
     env_file:
       - .env
