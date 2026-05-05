@@ -244,7 +244,7 @@ class ItemsAdmin(admin.ModelAdmin):
 
 @admin.register(Shops)
 class ShopsAdmin(admin.ModelAdmin):
-    list_display = ['id' 'address', 'shop_group']
+    list_display = ['id', 'address', 'shop_group']
     list_editable = ['shop_group']
     list_display_links = ['id']
 
