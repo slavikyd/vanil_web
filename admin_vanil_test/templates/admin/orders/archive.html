@@ -214,7 +214,7 @@
     return grid;
   }
 
-  function renderShops(day) {
+  function renderShops(day, dayIso) {
     const wrap = el('div', { class: 'shops' });
     for (const s of (day.shops || [])) {
       const shopDetails = el('details', { class: 'shop' });
@@ -292,7 +292,7 @@
       const totalsWrap = el('div', { id: totalsId });
       totalsWrap.appendChild(renderTotalsGrid(dayIso, day.totals || []));
       const shopsWrap = el('div', { id: shopsId, style: 'display:none;' });
-      shopsWrap.appendChild(renderShops(day));
+      shopsWrap.appendChild(renderShops(day, dayIso));
 
       function setMode(mode) {
         if (mode === 'totals') {
