@@ -148,7 +148,7 @@
       const table = el('table', { class: 'lo-table' });
       const thead = el('thead');
       const trh = el('tr');
-      ['Позиция', 'Не хватает', 'Заказ', 'Заявка с магазина', 'Остаток'].forEach(h => trh.appendChild(el('th', { text: h })));
+      ['Позиция', 'Не хватает', 'Заказ', 'Заявка с магазина', '0-й рейс', 'Остаток'].forEach(h => trh.appendChild(el('th', { text: h })));
       thead.appendChild(trh);
       table.appendChild(thead);
 
@@ -156,12 +156,15 @@
       for (const t of chunk) {
         const ordered_shop = Number(t.quantity_shop || 0);
         const ordered_special = Number(t.quantity_special || 0);
+        const ordered_priority = Number(t.quantity_priority || 0);
+
         const tr = el('tr', { 'data-day': dayIso, 'data-item': t.name });
         const tdName = el('td', { text: t.name });
 
         const missingTd = el('td', { class: 'num' });
         const specialTd = el('td', { class: 'num', text: String(ordered_special) });
         const orderedTd = el('td', { class: 'num', text: String(ordered_shop) });
+        const priorityTd = el('td', { class: 'num', text: String(ordered_priority) });
 
         const k = stockKey(dayIso, t.name);
         const stored = Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null;
@@ -174,7 +177,7 @@
         function recompute() {
           const parsed = parseStockInput(stockInput.value);
           const stock = (parsed === null) ? 0 : parsed;
-          const total = ordered_shop + ordered_special;
+          const total = ordered_shop + ordered_special + ordered_priority;
           const missing = Math.max(0, total - stock);
           const remainder = total - stock;
           missingTd.textContent = String(missing);
@@ -201,7 +204,7 @@
         tr.appendChild(specialTd);
         tr.appendChild(orderedTd);
         tr.appendChild(stockTd);
-        tr.appendChild(remainderTd);
+        tr.appendChild(priorityTd);
         tbody.appendChild(tr);
       }
       table.appendChild(tbody);
@@ -216,7 +219,15 @@
     for (const s of (day.shops || [])) {
       const shopDetails = el('details', { class: 'shop' });
       const cnt = (s.orders || []).length;
-      shopDetails.appendChild(el('summary', { text: `${s.shop} (${cnt})` }));
+      const summary = el('summary', { style: 'display:flex; align-items:center; justify-content:space-between;' });
+      summary.appendChild(document.createTextNode(`${s.shop} (${cnt})`));
+      summary.appendChild(el('a', {
+        href: `/admin/orders/export/shop/?order_for=${dayIso}&shop_id=${s.orders[0]?.shop_id || ''}`,
+        text: 'Экспорт в Excel',
+        style: 'font-size:12px; margin-left:12px;',
+        onclick: 'event.stopPropagation()',
+      }));
+      shopDetails.appendChild(summary);
 
       const body = el('div');
       for (const o of (s.orders || [])) {

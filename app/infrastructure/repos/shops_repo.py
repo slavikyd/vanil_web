@@ -12,12 +12,12 @@ class ShopsRepo:
         return row['address'] if row else None
 
     async def list_shops_full(self) -> list[dict]:
-        rows = await self._conn_fetch(
+        rows = await self._conn.fetch(
             """
             SELECT s.id, s.address, s.shop_group, sg.name AS group_name
             FROM shops s
             LEFT JOIN shops_groups sg ON sg.id = s.shop_group
-            ORDER BYs.address
+            ORDER BY s.address
         """
         )
         return [
