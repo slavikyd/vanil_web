@@ -222,7 +222,7 @@
       const summary = el('summary', { style: 'display:flex; align-items:center; justify-content:space-between;' });
       summary.appendChild(document.createTextNode(`${s.shop} (${cnt})`));
       summary.appendChild(el('a', {
-        href: `/admin/orders/export/shop/?order_for=${dayIso}&shop_id=${s.orders[0]?.shop_id || ''}`,
+        href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${s.orders[0]?.shop_id || ''}`,
         text: 'Экспорт в Excel',
         style: 'font-size:12px; margin-left:12px;',
         onclick: 'event.stopPropagation()',
