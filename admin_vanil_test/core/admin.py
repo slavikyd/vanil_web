@@ -21,6 +21,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 PRIORITY_GROUP_NAME = "0-й рейс"
+EXPORT_TABLE_GAP = 2
+
 # TODO: consider move to plain SQL 
 
 def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]:
@@ -205,29 +207,25 @@ class OrdersAdmin(admin.ModelAdmin):
         return JsonResponse(payload)
 
     def export_totals_view(self, request: HttpRequest) -> HttpResponse:
-        
         order_for = parse_date(request.GET.get("order_for") or "")
         if not order_for:
             return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=400)
 
         all_items = list(
-            Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')  
+            Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')
         )
-
         all_items = [i for i in all_items if i['name']]
 
-        totals_plain: dict [str, int] = {i['name']: 0 for i in all_items}
-        totals_special: dict [str, int] = {i['name']: 0 for i in all_items}
-        totals_priority: dict [str, int] = {i['name']: 0 for i in all_items}
-
+        totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_priority: dict[str, int] = {i['name']: 0 for i in all_items}
 
         for oi in (OrdersItems.objects
-                   .select_related("item", 'order__shop__shop_group')
-                   .filter(order__order_for=order_for)):
+                .select_related("item", 'order__shop__shop_group')
+                .filter(order__order_for=order_for)):
             name = getattr(oi.item, "name", None)
             if not name:
                 continue
-        
             qty = int(oi.quantity or 0)
             order_type = getattr(oi, 'order_type', 'Обычный')
             is_priority = (
@@ -241,37 +239,53 @@ class OrdersAdmin(admin.ModelAdmin):
             else:
                 totals_plain[name] = totals_plain.get(name, 0) + qty
 
+        tbl_groups: dict[int, list] = {}
+        for item in all_items:
+            tbl = item['tbl'] if item['tbl'] is not None else 3
+            tbl_groups.setdefault(tbl, []).append(item)
+
+        DATA_COLS = 4
+        right_col_start = DATA_COLS + EXPORT_TABLE_GAP + 1
+
         curr_date = datetime.now()
-        SHEET_NAME = f"Total_table_{curr_date.year}-{curr_date.month}-{curr_date.day}_{curr_date.hour}-{curr_date.minute}"
+        SHEET_NAME = f"Total_{curr_date.year}-{curr_date.month}-{curr_date.day}_{curr_date.hour}-{curr_date.minute}"
         wb = Workbook()
         ws = wb.active
         ws.title = SHEET_NAME
 
-        row = 1
-        for tbl_key, group in groupby(all_items, key=itemgetter('tbl')):
-            items_in_group = list(group)
-            
-            ws.cell(row=row, column=1, value='Позиция')
-            ws.cell(row=row, column=2, value='Заказ с магазина')
-            ws.cell(row=row, column=3, value='Заказ')
-            ws.cell(row=row, column=4, value='Юбик')
-            row += 1
-            for item in items_in_group:
+        def write_table(tbl_index: int, start_row: int, start_col: int) -> int:
+            items = tbl_groups.get(tbl_index, [])
+            if not items:
+                return start_row
+            ws.cell(row=start_row, column=start_col, value='Позиция')
+            ws.cell(row=start_row, column=start_col + 1, value='Заказ с магазина')
+            ws.cell(row=start_row, column=start_col + 2, value='Заказ')
+            ws.cell(row=start_row, column=start_col + 3, value='Юбик')
+            start_row += 1
+            for item in items:
                 name = item['name']
-                ws.cell(row=row, column=1, value=name)
-                ws.cell(row=row, column=2, value=totals_plain.get(name, 0))
-                ws.cell(row=row, column=3, value=totals_special.get(name, 0))
-                ws.cell(row=row, column=4, value=totals_priority.get(name, 0))
-                row += 1
-            row += 1
+                ws.cell(row=start_row, column=start_col, value=name)
+                ws.cell(row=start_row, column=start_col + 1, value=totals_plain.get(name, 0))
+                ws.cell(row=start_row, column=start_col + 2, value=totals_special.get(name, 0))
+                ws.cell(row=start_row, column=start_col + 3, value=totals_priority.get(name, 0))
+                start_row += 1
+            return start_row + 1 
+
+        left_row = 1
+        left_row = write_table(0, left_row, 1)
+        left_row = write_table(1, left_row, 1)
+
+        right_row = 1
+        right_row = write_table(2, right_row, right_col_start)
+        right_row = write_table(3, right_row, right_col_start)
 
         buf = BytesIO()
         wb.save(buf)
-        resp = HttpResponse(    
+        resp = HttpResponse(
             buf.getvalue(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-        logger.info('Export of main table')
+        logger.info('Export of main table', extra={'order_for': str(order_for)})
         resp['Content-Disposition'] = f'attachment; filename="{SHEET_NAME}.xlsx"'
         return resp
     
@@ -286,6 +300,16 @@ class OrdersAdmin(admin.ModelAdmin):
         except Shops.DoesNotExist:
             return HttpResponse("Shop not found", status=404)
 
+        all_items = list(
+            Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')
+        )
+        all_items = [i for i in all_items if i['name']]
+
+        totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
+        item_comments: dict[str, str] = {}
+        order_comments: list[str] = []
+
         orders = (
             Orders.objects
             .filter(shop_id=shop_id, order_for=order_for)
@@ -298,37 +322,69 @@ class OrdersAdmin(admin.ModelAdmin):
             .order_by("created")
         )
 
-        wb = Workbook()
-        ws = wb.active
-        ws.title = f"{shop.address or shop_id}"
-
-        row = 1
-        ws.cell(row=row, column=1, value="Позиция")
-        ws.cell(row=row, column=2, value="Спец. заказ")
-        ws.cell(row=row, column=3, value="Обычный")
-        ws.cell(row=row, column=4, value="Комментарий")
-        row += 1
-
         for order in orders:
+            if order.comment:
+                order_comments.append(order.comment)
             for oi in order.ordersitems_set.all():
                 name = getattr(oi.item, "name", None)
                 if not name:
                     continue
+                qty = int(oi.quantity or 0)
                 order_type = getattr(oi, "order_type", "Обычный")
-                special_qty = int(oi.quantity or 0) if order_type == "Спец. заказ" else 0
-                plain_qty = int(oi.quantity or 0) if order_type != "Спец. заказ" else 0
-                ws.cell(row=row, column=1, value=name)
-                ws.cell(row=row, column=2, value=special_qty)
-                ws.cell(row=row, column=3, value=plain_qty)
-                ws.cell(row=row, column=4, value=oi.comment or "")
-                row += 1
+                if order_type == "Спец. заказ":
+                    totals_special[name] = totals_special.get(name, 0) + qty
+                else:
+                    totals_plain[name] = totals_plain.get(name, 0) + qty
+                if oi.comment:
+                    item_comments[name] = oi.comment
 
-            if order.comment:
-                ws.cell(row=row, column=1, value="Комментарий к заказу:")
-                ws.cell(row=row, column=2, value=order.comment)
-                row += 1
+        # Group items by tbl
+        tbl_groups: dict[int, list] = {}
+        for item in all_items:
+            tbl = item['tbl'] if item['tbl'] is not None else 3
+            tbl_groups.setdefault(tbl, []).append(item)
 
-            row += 1  
+        DATA_COLS = 4  # Позиция + Спец. заказ + Обычный + Комментарий
+        right_col_start = DATA_COLS + EXPORT_TABLE_GAP + 1
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = (shop.address or shop_id)[:31]  # Excel sheet name limit
+
+        def write_table(tbl_index: int, start_row: int, start_col: int) -> int:
+            items = tbl_groups.get(tbl_index, [])
+            if not items:
+                return start_row
+            ws.cell(row=start_row, column=start_col, value='Позиция')
+            ws.cell(row=start_row, column=start_col + 1, value='Спец. заказ')
+            ws.cell(row=start_row, column=start_col + 2, value='Обычный')
+            ws.cell(row=start_row, column=start_col + 3, value='Комментарий')
+            start_row += 1
+            for item in items:
+                name = item['name']
+                ws.cell(row=start_row, column=start_col, value=name)
+                ws.cell(row=start_row, column=start_col + 1, value=totals_special.get(name, 0))
+                ws.cell(row=start_row, column=start_col + 2, value=totals_plain.get(name, 0))
+                ws.cell(row=start_row, column=start_col + 3, value=item_comments.get(name, ''))
+                start_row += 1
+            return start_row + 1
+
+        # Left side: tables 0 and 1
+        left_row = 1
+        left_row = write_table(0, left_row, 1)
+        left_row = write_table(1, left_row, 1)
+
+        # Right side: tables 2 and 3
+        right_row = 1
+        right_row = write_table(2, right_row, right_col_start)
+        right_row = write_table(3, right_row, right_col_start)
+
+        # Order comments at the bottom
+        bottom_row = max(left_row, right_row) + 1
+        for comment in order_comments:
+            ws.cell(row=bottom_row, column=1, value='Комментарий к заказу:')
+            ws.cell(row=bottom_row, column=2, value=comment)
+            bottom_row += 1
 
         buf = BytesIO()
         wb.save(buf)
@@ -336,6 +392,7 @@ class OrdersAdmin(admin.ModelAdmin):
             buf.getvalue(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+        logger.info('Export of shop table', extra={'shop_id': shop_id, 'order_for': str(order_for)})
         resp["Content-Disposition"] = f'attachment; filename="shop_{shop_id}_{order_for}.xlsx"'
         return resp
 
