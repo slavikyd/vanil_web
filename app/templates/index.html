@@ -219,8 +219,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('item_id', itemId);
         formData.append('order_type', isSpecial ? 'Спец. заказ' : 'Обычный');
-        const tgId = getTgId();
-        if (tgId) formData.append('tg_id', tgId);
+        // const tgId = getTgId();
+        // if (tgId) formData.append('tg_id', tgId);
         await fetch('/set-order-type', { method: 'POST', body: formData });
     }
 
