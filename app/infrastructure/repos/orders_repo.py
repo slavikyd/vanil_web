@@ -3,6 +3,7 @@ from datetime import date
 from typing import Literal
 
 from asyncpg import Connection
+import logging
 
 
 class OrdersRepo:
@@ -64,6 +65,8 @@ class OrdersRepo:
         quantities = list(cart.values())
         notes = [(comments.get(item_id) or '').strip() or None for item_id in cart]
         types = [order_types.get(item_id) or 'Обычный' for item_id in cart]
+        logging.getLogger(__name__).warning(f'DEBUG types: {types}')
+
         await self._conn.execute(
             """
             INSERT INTO orders_items (order_id, item_id, quantity, comment, order_type)
