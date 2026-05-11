@@ -6,9 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.constants import SESSION_MAX_AGE_SECONDS
 from app.db import connect_db
-from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.logging import setup_logging
 from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.redis import redis

@@ -11,7 +11,6 @@ try:
 except Exception:
     from httpx._transports.asgi import ASGITransport
 
-from app.constants import CART_TTL_SECONDS
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.main import app
 from app.routes.deps import get_cart_repo, get_uow
