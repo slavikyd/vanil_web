@@ -11,6 +11,7 @@ try:
 except Exception:
     from httpx._transports.asgi import ASGITransport
 
+from app.constants import CART_TTL_SECONDS
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.main import app
 from app.routes.deps import get_cart_repo, get_uow
@@ -22,6 +23,7 @@ os.environ.setdefault('DBSCHEMA', 'test')
 class FakeCartRepo:
     def __init__(self, redis):
         self._redis = redis
+        self._comments: dict[str, dict[str, str]] = {}
 
     @staticmethod
     def _key(session_id: str) -> str:
@@ -37,16 +39,28 @@ class FakeCartRepo:
         raw = await self._redis.hgetall(self._key(session_id))
         return {str(k): self._to_int(v) for k, v in raw.items()}
 
+    async def get_comments(self, *, session_id: str) -> dict[str, str]:
+        return dict(self._comments.get(session_id, {}))
+
     async def set_item(self, *, session_id: str, item_id: str, quantity: int) -> None:
         key = self._key(session_id)
         if quantity > 0:
             await self._redis.hset(key, item_id, quantity)
-            await self._redis.expire(key, 1800)
+            await self._redis.expire(key, CART_TTL_SECONDS)
         else:
             await self._redis.hdel(key, item_id)
+            self._comments.get(session_id, {}).pop(str(item_id), None)
+
+    async def set_comment(self, *, session_id: str, item_id: str, comment: str) -> None:
+        bucket = self._comments.setdefault(session_id, {})
+        if not comment:
+            bucket.pop(str(item_id), None)
+        else:
+            bucket[str(item_id)] = comment
 
     async def clear(self, *, session_id: str) -> None:
         await self._redis.delete(self._key(session_id))
+        self._comments.pop(session_id, None)
 
 
 @pytest.fixture(scope='session')

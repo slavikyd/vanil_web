@@ -29,16 +29,28 @@ class OrdersRepo:
             order_for,
         )
 
-    async def add_items(self, *, order_id: uuid.UUID, cart: dict[str, int]) -> None:
+    async def add_items(
+        self,
+        *,
+        order_id: uuid.UUID,
+        cart: dict[str, int],
+        comments: dict[str, str] | None = None,
+    ) -> None:
+        comments = comments or {}
         for item_id, qty in cart.items():
+            raw = comments.get(item_id)
+            if raw is None:
+                raw = comments.get(str(item_id))
+            note = (raw or '').strip() or None
             await self._conn.execute(
                 """
-                INSERT INTO orders_items (order_id, item_id, quantity)
-                VALUES ($1, $2, $3)
+                INSERT INTO orders_items (order_id, item_id, quantity, comment)
+                VALUES ($1, $2, $3, $4)
                 """,
                 order_id,
                 uuid.UUID(item_id),
                 qty,
+                note,
             )
 
     async def list_orders_for_view(self) -> list[dict]:
@@ -102,7 +114,7 @@ class OrdersRepo:
             JOIN orders_items oi ON oi.order_id = o.id
             JOIN items i ON oi.item_id = i.id
             {wheresql}
-            ORDER BY o.order_for ASC, o.created ASC
+            ORDER BY o.order_for DESC, o.created DESC
             """,
             *args,
         )
@@ -116,6 +128,36 @@ class OrdersRepo:
                 'cashier_name': r['cashier_name'],
                 'item_name': r['item_name'],
                 'quantity': r['quantity'],
+            }
+            for r in rows
+        ]
+
+    async def cashier_rows(self, *, cashier_id: str) -> list[dict]:
+        rows = await self._conn.fetch(
+            """
+            SELECT
+              o.id AS order_id,
+              o.order_for,
+              o.created,
+              o.address,
+              oi.quantity,
+              i.name AS item_name
+            FROM orders o
+            JOIN orders_items oi ON oi.order_id = o.id
+            JOIN items i ON oi.item_id = i.id
+            WHERE o.cashier_id = $1
+            ORDER BY o.order_for DESC, o.created DESC
+            """,
+            cashier_id,
+        )
+        return [
+            {
+                'order_id': str(r['order_id']),
+                'order_for': r['order_for'],
+                'created': r['created'],
+                'address': r['address'],
+                'item_name': r['item_name'],
+                'quantity': int(r['quantity']),
             }
             for r in rows
         ]
@@ -177,5 +219,39 @@ class OrdersRepo:
         )
         return [
             {'address': r['address'], 'name': r['name'], 'quantity': r['quantity']}
+            for r in rows
+        ]
+
+    async def admin_rows_live(self) -> list[dict]:
+        rows = await self._conn.fetch(
+            """
+            SELECT
+              o.id AS order_id,
+              o.order_for,
+              o.created,
+              o.shop_id,
+              o.address,
+              c.full_name AS cashier_name,
+              oi.quantity,
+              i.name AS item_name
+            FROM orders o
+            JOIN cashiers c ON o.cashier_id = c.id
+            JOIN orders_items oi ON oi.order_id = o.id
+            JOIN items i ON oi.item_id = i.id
+            ORDER BY o.order_for DESC, o.created DESC, o.id
+            """
+        )
+
+        return [
+            {
+                'order_id': str(r['order_id']),
+                'order_for': r['order_for'],
+                'created': r['created'],
+                'shop_id': r['shop_id'],
+                'address': r['address'],
+                'cashier_name': r['cashier_name'],
+                'item_name': r['item_name'],
+                'quantity': r['quantity'],
+            }
             for r in rows
         ]

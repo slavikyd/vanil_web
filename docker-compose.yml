@@ -24,7 +24,7 @@ services:
       - .:/code
     depends_on:
       - db
-      - rabbitmq
+      # - rabbitmq
     env_file:
       - .env
 

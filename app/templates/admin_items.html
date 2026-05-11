@@ -8,10 +8,32 @@
 <body style="font-family: Arial, Helvetica, sans-serif">
     <h1>Управление позициями</h1>
     <p><a href="/">← Назад</a></p>
-    
+
+    <h4 style="margin-top: 20px; text-align: left;">Категории</h4>
+    <form method="post" action="/admin/categories/create" style="display: flex; gap: 10px; margin-bottom: 16px; width: 400px;">
+        <input type="text" name="name" placeholder="Новая категория" required style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; flex: 1;">
+        <button type="submit" style="padding: 6px 12px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Добавить</button>
+    </form>
+
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-width: 500px;">
+        {% for category in categories %}
+        <form method="post" action="/admin/categories/update" style="display: flex; gap: 8px; align-items: center;">
+            <input type="hidden" name="category_id" value="{{ category.id }}">
+            <input type="text" name="name" value="{{ category.name }}" required style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; flex: 1;">
+            <button type="submit" style="padding: 6px 10px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;">Переименовать</button>
+        </form>
+        {% endfor %}
+    </div>
+
     <h4 style="margin-top: 20px; text-align: left;">Добавить новый товар</h4>
     <form method="post" action="/admin/items/create" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; width: 400px;">
         <input type="text" name="name" placeholder="Название" required style="padding: 6px; border-radius: 4px; border: 1px solid #ccc;">
+        <select name="category_id" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc;">
+            <option value="">Без категории</option>
+            {% for category in categories %}
+            <option value="{{ category.id }}">{{ category.name }}</option>
+            {% endfor %}
+        </select>
         <input type="number" name="price" step="0.01" placeholder="Цена" required style="padding: 6px; border-radius: 4px; border: 1px solid #ccc;">
         <input type="number" name="ttl" placeholder="Срок (дней)" required style="padding: 6px; border-radius: 4px; border: 1px solid #ccc;">
         <button type="submit" style="padding: 6px 12px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Добавить</button>
@@ -23,6 +45,7 @@
         <thead>
             <tr>
                 <th>Название</th>
+                <th>Категория</th>
                 <th>Активна</th>
                 <th>Действия</th>
             </tr>
@@ -32,13 +55,18 @@
             <tr>
                 <td>{{ item.name }}</td>
                 <td>
+                    <select name="category_{{ item.id }}" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+                        <option value="">Без категории</option>
+                        {% for category in categories %}
+                        <option value="{{ category.id }}" {% if item.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
                     <input type="checkbox" name="active_{{ item.id }}" value="true" {% if item.active %}checked{% endif %}>
                 </td>
                 <td>
-                    <form method="post" action="/admin/items/delete" onsubmit="return confirm('Удалить этот товар?');" style="display: inline;">
-                        <input type="hidden" name="item_id" value="{{ item.id }}">
-                        <button type="submit">Удалить</button>
-                    </form>
+                    <button type="submit" formaction="/admin/items/delete" formmethod="post" name="item_id" value="{{ item.id }}" onclick="return confirm('Удалить этот товар?');">Удалить</button>
                 </td>
             </tr>
             {% endfor %}

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Админ - Живые заявки</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; background: #f6f7fb; margin: 0; padding: 12px; }
+        .container { max-width: 1600px; margin: 0 auto; }
+        .top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn { display: inline-block; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; background: #fff; color: #222; text-decoration: none; }
+        .status { color: #666; font-size: 13px; }
+        .day { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+        .day summary { cursor: pointer; list-style: none; padding: 10px 12px; background: #f9fafb; display: flex; justify-content: space-between; align-items: center; }
+        .day summary::-webkit-details-marker { display: none; }
+        .pill { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #e0e7ff; color: #3730a3; }
+        .mode-buttons { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eee; }
+        .mode-btn { border: 1px solid #ddd; background: #fff; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+        .mode-btn.active { background: #111827; color: #fff; border-color: #111827; }
+        .mode { padding: 8px 10px; }
+        .excel-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; background: #fff; }
+        .excel-table th, .excel-table td { border: 1px solid #d1d5db; padding: 3px 5px; line-height: 1.15; }
+        .excel-table th { background: #f3f4f6; text-align: left; }
+        .excel-table td:last-child { text-align: right; font-weight: 600; }
+        .excel-table input { font: inherit; }
+        .excel-table th, .excel-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .excel-table .col-name { width: 46%; }
+        .excel-table .col-stock { width: 18%; text-align: right; }
+        .excel-table .col-ordered { width: 18%; text-align: right; font-weight: 600; }
+        .excel-table .col-missing { width: 18%; text-align: right; font-weight: 600; }
+        .day-tools { padding: 0 12px 8px; }
+        .excel-link { display: inline-block; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #111827; background: #fff; font-size: 13px; }
+        .totals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 6px; align-items: start; }
+        .shop { border: 1px solid #eee; border-radius: 6px; margin-bottom: 8px; overflow: hidden; }
+        .shop summary { padding: 8px 10px; cursor: pointer; background: #fcfcfc; }
+        .order { border-top: 1px solid #f0f0f0; padding: 8px 10px; }
+        .order-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; font-size: 14px; }
+        .items { margin: 0; padding-left: 18px; }
+        .muted { color: #777; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top">
+            <h1 style="margin: 0;">Живые заявки</h1>
+            <div class="actions">
+                <button class="btn" id="btn-refresh" type="button">Обновить</button>
+                <a class="btn" href="/admin/orders">Обычная страница</a>
+                <a class="btn" href="/admin/orders/live/archive">Архив (старше 5 дней)</a>
+                <a class="btn" href="/">На главную</a>
+            </div>
+        </div>
+        <div class="status" id="status">Нажмите «Обновить»</div>
+        <div id="root"></div>
+    </div>
+
+    <script>
+        const root = document.getElementById('root');
+        const statusEl = document.getElementById('status');
+        let data = { days: [] };
+        const STOCK_LS_KEY = 'admin_live_orders_stock_v1';
+        let stockByKey = loadStockByKey();
+
+        function loadStockByKey() {
+            try {
+                const raw = localStorage.getItem(STOCK_LS_KEY);
+                const parsed = raw ? JSON.parse(raw) : {};
+                return parsed && typeof parsed === 'object' ? parsed : {};
+            } catch {
+                return {};
+            }
+        }
+
+        function saveStockByKey() {
+            try { localStorage.setItem(STOCK_LS_KEY, JSON.stringify(stockByKey)); } catch {}
+        }
+
+        function stockKey(dayIso, itemName) {
+            return `${dayIso}::${itemName}`;
+        }
+
+        function toIntOrNull(v) {
+            if (v === '' || v === null || v === undefined) return null;
+            const n = Number(v);
+            if (!Number.isFinite(n)) return null;
+            return Math.max(0, Math.trunc(n));
+        }
+
+        function fmtDate(iso) {
+            const d = new Date(iso + 'T00:00:00');
+            return d.toLocaleDateString('ru-RU');
+        }
+
+        function renderTotals(day) {
+            if (!day.totals.length) return '<div class="muted">Нет позиций</div>';
+            const total = day.totals.length;
+            const columns = Math.min(4, Math.max(1, Math.ceil(total / 18)));
+            const rowsPerColumn = Math.ceil(total / columns);
+            const blocks = [];
+            for (let i = 0; i < columns; i++) {
+                const chunk = day.totals.slice(i * rowsPerColumn, (i + 1) * rowsPerColumn);
+                if (!chunk.length) continue;
+                const rows = chunk.map(t => {
+                    const key = stockKey(day.date, t.name);
+                    const stock = toIntOrNull(stockByKey[key]);
+                    const missing = Math.max(0, (Number(t.quantity) || 0) - (stock ?? 0));
+                    const stockValueAttr = stock === null ? '' : String(stock);
+                    return `
+                        <tr data-day="${day.date}" data-item="${t.name}">
+                            <td class="col-name" title="${t.name}">${t.name}</td>
+                            <td class="missing-cell col-missing">${missing}</td>
+                            <td class="col-ordered">${t.quantity}</td>
+                            <td class="col-stock">
+                                <input
+                                    class="stock-input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    inputmode="numeric"
+                                    style="width: 100%; box-sizing: border-box; padding: 3px 5px;"
+                                    value="${stockValueAttr}"
+                                    data-ordered="${t.quantity}"
+                                />
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                blocks.push(`
+                    <table class="excel-table">
+                        <thead><tr><th class="col-name">Позиция</th><th class="col-missing">Не хватает</th><th class="col-ordered">Заказано</th><th class="col-stock">Остаток</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `);
+            }
+            return `<div class="totals-grid">${blocks.join('')}</div>`;
+        }
+
+        function renderShops(day) {
+            if (!day.shops.length) return '<div class="muted">Нет заявок</div>';
+            return day.shops.map(shop => {
+                const ordersHtml = shop.orders.map(order => {
+                    const itemsHtml = order.items.map(i => `<li>${i.name} - <strong>${i.quantity}</strong></li>`).join('');
+                    return `
+                        <div class="order">
+                            <div class="order-head">
+                                <div><strong>${order.created_hhmm}</strong> | ${order.cashier_name}</div>
+                                <div class="muted">${order.id}</div>
+                            </div>
+                            <ul class="items">${itemsHtml}</ul>
+                        </div>
+                    `;
+                }).join('');
+                return `
+                    <details class="shop">
+                        <summary>${shop.shop} (${shop.orders.length})</summary>
+                        ${ordersHtml}
+                    </details>
+                `;
+            }).join('');
+        }
+
+        function render() {
+            if (!data.days.length) {
+                root.innerHTML = '<div class="day"><div class="mode muted">Нет заявок</div></div>';
+                return;
+            }
+
+            root.innerHTML = data.days.map((day) => `
+                <details class="day" ${day.is_today ? 'open' : ''} data-day="${day.date}">
+                    <summary>
+                        <strong>${fmtDate(day.date)}${day.is_today ? ' (сегодня)' : ''}</strong>
+                        <span class="pill">${day.total_orders} заявок</span>
+                    </summary>
+                    <div class="mode-buttons">
+                        <button class="mode-btn active" data-mode="totals" data-day="${day.date}">Все позиции</button>
+                        <button class="mode-btn" data-mode="shops" data-day="${day.date}">По магазинам</button>
+                    </div>
+                    <div class="day-tools">
+                        <a class="excel-link" href="/admin/orders/live/export/totals?order_for=${day.date}">Экспорт totals в Excel</a>
+                    </div>
+                    <div class="mode" id="totals-${day.date}">${renderTotals(day)}</div>
+                    <div class="mode" id="shops-${day.date}" style="display:none;">${renderShops(day)}</div>
+                </details>
+            `).join('');
+
+            root.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const day = btn.dataset.day;
+                    const mode = btn.dataset.mode;
+                    const wrap = btn.closest('.mode-buttons');
+                    wrap.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    document.getElementById(`totals-${day}`).style.display = mode === 'totals' ? 'block' : 'none';
+                    document.getElementById(`shops-${day}`).style.display = mode === 'shops' ? 'block' : 'none';
+                });
+            });
+        }
+
+        root.addEventListener('input', (e) => {
+            const input = e.target;
+            if (!(input instanceof HTMLInputElement)) return;
+            if (!input.classList.contains('stock-input')) return;
+
+            const row = input.closest('tr');
+            if (!row) return;
+
+            const dayIso = row.getAttribute('data-day') || '';
+            const itemName = row.getAttribute('data-item') || '';
+            const key = stockKey(dayIso, itemName);
+
+            const stock = toIntOrNull(input.value);
+            if (stock === null) {
+                delete stockByKey[key];
+            } else {
+                stockByKey[key] = stock;
+            }
+            saveStockByKey();
+
+            const ordered = toIntOrNull(input.dataset.ordered) ?? 0;
+            const missing = Math.max(0, ordered - (stock ?? 0));
+            const missingCell = row.querySelector('.missing-cell');
+            if (missingCell) missingCell.textContent = String(missing);
+        });
+
+        async function refresh() {
+            statusEl.textContent = 'Обновление...';
+            try {
+                const resp = await fetch('/admin/orders/live/data', { cache: 'no-store' });
+                if (!resp.ok) throw new Error('bad response');
+                data = await resp.json();
+                render();
+                statusEl.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+            } catch (e) {
+                statusEl.textContent = 'Ошибка обновления. Нажмите «Обновить» чтобы повторить.';
+            }
+        }
+
+        render();
+        document.getElementById('btn-refresh').addEventListener('click', refresh);
+    </script>
+</body>
+</html>

@@ -13,6 +13,8 @@ class InvalidOrderDateError(Exception):
 
 
 class OrderService:
+    DEFAULT_TEST_ADDRESS = 'Тестовая улица 1'
+
     @staticmethod
     async def create_order(
         *,
@@ -21,6 +23,8 @@ class OrderService:
         shop_id: str | None,
         cart: dict[str, int],
         order_for: str,
+        store_name: str | None = None,
+        comments: dict[str, str] | None = None,
     ) -> uuid.UUID:
         if not cart:
             raise EmptyCartError()
@@ -30,19 +34,12 @@ class OrderService:
         except ValueError:
             raise InvalidOrderDateError()
 
-        if not shop_id:
-            raise ValueError('Shop id is required')
-
-        assert uow.shops is not None
         assert uow.orders is not None
 
         order_id = uuid.uuid4()
+        address = (store_name or '').strip() or OrderService.DEFAULT_TEST_ADDRESS
 
         async with uow.transaction():
-            address = await uow.shops.get_address(shop_id=shop_id)
-            if not address:
-                raise ValueError('Shop not found')
-
             await uow.orders.create_order(
                 order_id=order_id,
                 cashier_id=cashier_id,
@@ -50,6 +47,8 @@ class OrderService:
                 address=address,
                 order_for=order_for_date,
             )
-            await uow.orders.add_items(order_id=order_id, cart=cart)
+            await uow.orders.add_items(
+                order_id=order_id, cart=cart, comments=comments
+            )
 
         return order_id

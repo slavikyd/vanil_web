@@ -6,7 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.constants import SESSION_MAX_AGE_SECONDS
 from app.db import connect_db
+from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.logging import setup_logging
 from app.redis import redis
 from app.routes import admin_routes, crud_routes, extra_routes
@@ -29,7 +31,12 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
-app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET_KEY'))
+app.add_middleware(CashierSessionTimeoutMiddleware)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv('SESSION_SECRET_KEY'),
+    max_age=SESSION_MAX_AGE_SECONDS,
+)
 
 
 @app.on_event('startup')
