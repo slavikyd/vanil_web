@@ -148,7 +148,7 @@
       const table = el('table', { class: 'lo-table' });
       const thead = el('thead');
       const trh = el('tr');
-      ['Позиция', 'Не хватает', 'Заказ', 'Заявка с магазина', '0-й рейс', 'Остаток'].forEach(h => trh.appendChild(el('th', { text: h })));
+      ['Позиция', 'Не хватает', 'Заказ', 'Заявка с магазина', 'Остаток', '0-й рейс'].forEach(h => trh.appendChild(el('th', { text: h })));
       thead.appendChild(trh);
       table.appendChild(thead);
 
@@ -212,30 +212,111 @@
     return grid;
   }
 
-  function renderShops(day, dayIso) {
-    const wrap = el('div', { class: 'shops' });
-    for (const s of (day.shops || [])) {
-      const shopDetails = el('details', { class: 'shop' });
-      const cnt = (s.orders || []).length;
-      const summary = el('summary', { style: 'display:flex; align-items:center; justify-content:space-between;' });
-      summary.appendChild(document.createTextNode(`${s.shop} (${cnt})`));
-      summary.appendChild(el('a', {
-        href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${s.orders[0]?.shop_id || ''}`,
-        text: 'Экспорт в Excel',
-        style: 'font-size:12px; margin-left:12px;',
-        onclick: 'event.stopPropagation()',
-      }));
-      shopDetails.appendChild(summary);
+  function buildShopTotals(shopData, allItems) {
+  const totals_special = {};
+  const totals_plain = {};
+  for (const item of allItems) totals_special[item.name] = totals_plain[item.name] = 0;
 
-      const body = el('div');
-      for (const o of (s.orders || [])) {
+  for (const o of (shopData ? shopData.orders : [])) {
+    for (const it of (o.items || [])) {
+      // items payload doesn't carry order_type per item at this level,
+      // so we sum everything into plain for the shop summary
+      totals_plain[it.name] = (totals_plain[it.name] || 0) + (it.quantity || 0);
+    }
+  }
+  return { totals_special, totals_plain };
+}
+
+function renderShopSummary(dayIso, shopData, allItems) {
+  // Group items by tbl same as main grid
+  const columns = [[], [], [], []];
+  const unassigned = [];
+  for (const item of allItems) {
+    if (item.tbl !== null && item.tbl !== undefined) {
+      const col = columns[item.tbl];
+      if (col) col.push(item);
+    } else {
+      unassigned.push(item);
+    }
+  }
+  for (let i = 0; i < 4; i++) columns[i].sort((a, b) => a.pos - b.pos);
+  columns[3].push(...unassigned);
+
+  const { totals_plain } = buildShopTotals(shopData, allItems);
+
+  const grid = el('div', { class: 'totals-grid' });
+  for (let i = 0; i < 4; i++) {
+    const chunk = columns[i];
+    if (!chunk.length) continue;
+
+    const table = el('table', { class: 'lo-table' });
+    const thead = el('thead');
+    const trh = el('tr');
+    ['Позиция', 'Количество'].forEach(h => trh.appendChild(el('th', { text: h })));
+    thead.appendChild(trh);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    for (const item of chunk) {
+      const qty = totals_plain[item.name] || 0;
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: item.name }));
+      tr.appendChild(el('td', { class: 'num', text: String(qty) }));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    grid.appendChild(table);
+  }
+  return grid;
+}
+
+function renderShops(day, dayIso, allItems) {
+  // Build lookup: shop_id -> shop data (orders etc)
+  const shopDataMap = {};
+  for (const s of (day.shops || [])) {
+    shopDataMap[s.shop_id] = s;
+  }
+
+  const wrap = el('div');
+
+  // Tab strip
+  const tabStrip = el('div', { style: 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;' });
+  const tabContents = el('div');
+
+  const allShops = (window._allShops || []);
+
+  allShops.forEach((shop, idx) => {
+    const hasOrders = !!shopDataMap[shop.id];
+    const tabBtn = el('button', {
+      type: 'button',
+      class: 'mode-btn' + (idx === 0 ? ' active' : ''),
+      text: shop.address,
+      style: hasOrders ? '' : 'opacity:0.45;',
+    });
+
+    const pane = el('div', { style: idx === 0 ? '' : 'display:none;' });
+    const shopData = shopDataMap[shop.id] || null;
+
+    // Summary table
+    pane.appendChild(renderShopSummary(dayIso, shopData, allItems));
+
+    // Export link
+    pane.appendChild(el('a', {
+      href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
+      text: 'Экспорт в Excel',
+      style: 'display:inline-block; margin: 8px 0 12px; font-size:12px;',
+    }));
+
+    // Orders list
+    if (!shopData || !shopData.orders.length) {
+      pane.appendChild(el('div', { text: 'Нет заявок', style: 'color:var(--body-quiet-color); margin-top:8px;' }));
+    } else {
+      for (const o of shopData.orders) {
         const order = el('div', { class: 'order' });
-        const head = el('div', { class: 'order-head' }, [
+        order.appendChild(el('div', { class: 'order-head' }, [
           el('div', { text: `${o.created_hhmm} | ${o.cashier_name}` }),
-          el('div', { class: 'muted', text: String(o.id) })
-        ]);
-        order.appendChild(head);
-
+          el('div', { class: 'muted', text: String(o.id) }),
+        ]));
         const ul = el('ul', { class: 'items' });
         for (const it of (o.items || [])) {
           const li = el('li');
@@ -244,14 +325,25 @@
           ul.appendChild(li);
         }
         order.appendChild(ul);
-        body.appendChild(order);
+        pane.appendChild(order);
       }
-
-      shopDetails.appendChild(body);
-      wrap.appendChild(shopDetails);
     }
-    return wrap;
-  }
+
+    tabBtn.addEventListener('click', () => {
+      tabStrip.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      tabBtn.classList.add('active');
+      tabContents.querySelectorAll(':scope > div').forEach(p => p.style.display = 'none');
+      pane.style.display = '';
+    });
+
+    tabStrip.appendChild(tabBtn);
+    tabContents.appendChild(pane);
+  });
+
+  wrap.appendChild(tabStrip);
+  wrap.appendChild(tabContents);
+  return wrap;
+}
 
   function renderDays(payload) {
     clearRoot();
@@ -290,7 +382,7 @@
       const totalsWrap = el('div', { id: totalsId });
       totalsWrap.appendChild(renderTotalsGrid(dayIso, day.totals || []));
       const shopsWrap = el('div', { id: shopsId, style: 'display:none;' });
-      shopsWrap.appendChild(renderShops(day, dayIso));
+      shopsWrap.appendChild(renderShops(day, dayIso, day.totals || []));
 
       function setMode(mode) {
         if (mode === 'totals') {
@@ -321,6 +413,7 @@
       const resp = await fetch(dataUrl, { cache: 'no-store' });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const payload = await resp.json();
+      window._allShops = payload.all_shops || [];
       renderDays(payload);
       statusEl.textContent = `Обновлено: ${nowTimeRu()}`;
     } catch (e) {

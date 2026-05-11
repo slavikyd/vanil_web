@@ -39,6 +39,9 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
     )
     all_items = [i for i in all_items if i["name"]]
 
+    all_shops = list(Shops.objects.order_by('address').values('id', 'address'))
+    all_shops = [{'id': str(s['id']), 'address': s['address']} for s in all_shops]
+
     order_items_prefetch = (
         OrdersItems.objects
         .select_related("item")
@@ -74,8 +77,8 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
         shops_map: dict[str, list] = {}
 
         for o in day_orders:
-            shop_key = o.address or getattr(o, "shop_id", None) or "Unknown shop"
-            shops_map.setdefault(shop_key, []).append(o)
+            shop_id_key = str(getattr(o, 'shop_id', None) or o.address or 'unknown')
+            shops_map.setdefault(shop_id_key, []).append(o)
 
             is_priority = (
                 getattr(getattr(o, "shop", None), "shop_group", None) is not None
@@ -101,6 +104,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             for i in all_items
         ]
 
+        shop_lookup = {str(s['id']): s['address'] for s in all_shops}
         shops_payload = []
         for shop_key in sorted(shops_map.keys()):
             shop_orders = sorted(
@@ -124,7 +128,8 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
                     "shop_id": getattr(o, "shop_id", None),
                     "items": items_payload,
                 })
-            shops_payload.append({"shop": shop_key, "orders": orders_payload})
+            
+            shops_payload.append({"shop_id": shop_key, "shop": shop_lookup.get(shop_key, shop_key), "orders": orders_payload})
 
         days_payload.append({
             "date": d.isoformat(),
@@ -136,6 +141,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
 
     return {
         "generated_at": timezone.now().isoformat(),
+        'all_shops': all_shops,
         "days": days_payload,
     }
 
@@ -180,6 +186,9 @@ class OrdersAdmin(admin.ModelAdmin):
             "data_url": "live-data/",
             "archive_url": "archive/",
             "export_url": "export/totals/",
+            "show_archive_link": True,
+            "archive_url": "archive/",
+            "archive_heading": "Архив",
             "opts": self.model._meta,
             **(extra_context or {}),
         }
