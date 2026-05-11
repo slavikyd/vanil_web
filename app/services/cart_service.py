@@ -1,3 +1,4 @@
+from app.constants import MAX_ITEM_COMMENT_LENGTH
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 
 
