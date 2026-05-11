@@ -1,0 +1,337 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .lo-topbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin: 12px 0; }
+  .lo-topbar h1 { margin: 0; font-size: 20px; }
+  .lo-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .lo-status { margin: 6px 0 14px; color: var(--body-quiet-color); }
+  .day { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 10px 12px; margin: 12px 0; background: var(--body-bg); }
+  .day > summary { cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .pill { display:inline-block; padding: 2px 10px; border-radius: 999px; background: var(--darkened-bg); color: var(--body-fg); font-size: 12px; white-space:nowrap; }
+  .day-tools { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin: 10px 0; }
+  .modes { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .mode-btn { border: 1px solid var(--hairline-color); background: var(--body-bg); padding: 6px 10px; border-radius: 6px; cursor:pointer; }
+  .mode-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .totals-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  table.lo-table { width:100%; border-collapse: collapse; }
+  table.lo-table th, table.lo-table td { border: 1px solid var(--hairline-color); padding: 6px 8px; vertical-align: top; }
+  table.lo-table th { background: var(--darkened-bg); text-align:left; }
+  table.lo-table td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  table.lo-table input[type="number"] { width: 90px; max-width: 100%; }
+  .shops { display:flex; flex-direction:column; gap:10px; }
+  .shop { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 8px 10px; background: var(--body-bg); }
+  .shop > summary { cursor:pointer; }
+  .order { border-top: 1px dashed var(--hairline-color); padding: 8px 0; }
+  .order:first-child { border-top: none; }
+  .order-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .muted { color: var(--body-quiet-color); font-size: 12px; }
+  .items { margin: 6px 0 0; padding-left: 18px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lo-topbar">
+  <h1>{{ page_heading }}</h1>
+  <div class="lo-actions">
+    <button id="btn-refresh" type="button" class="button">Обновить</button>
+    <a href="{{ normal_orders_url }}">Обычная страница</a>
+    {% if show_live_link %}
+      <a href="{{ live_url }}">Живые заявки</a>
+    {% endif %}
+    <a href="{{ home_url }}">На главную</a>
+  </div>
+</div>
+
+<div id="status-line" class="lo-status">Нажмите «Обновить»</div>
+<div id="root"></div>
+
+{{ data_url|json_script:"live-data-url" }}
+<script>
+(() => {
+  const dataUrl = JSON.parse(document.getElementById('live-data-url').textContent);
+  const statusEl = document.getElementById('status-line');
+  const root = document.getElementById('root');
+  const btn = document.getElementById('btn-refresh');
+
+  const STORAGE_KEY = 'admin_live_orders_stock_v1';
+  const stockKey = (dayIso, itemName) => `${dayIso}::${itemName}`;
+
+  function readStockStore() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return {};
+      const obj = JSON.parse(raw);
+      return (obj && typeof obj === 'object') ? obj : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeStockStore(obj) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+    } catch (_) {}
+  }
+
+  function parseStockInput(v) {
+    if (v === '' || v === null || v === undefined) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    const t = Math.trunc(n);
+    return Math.max(0, t);
+  }
+
+  function fmtDateRu(dayIso) {
+    const d = new Date(`${dayIso}T00:00:00`);
+    return d.toLocaleDateString('ru-RU');
+  }
+
+  function nowTimeRu() {
+    return new Date().toLocaleTimeString('ru-RU');
+  }
+
+  function clearRoot() {
+    while (root.firstChild) root.removeChild(root.firstChild);
+  }
+
+  function el(tag, attrs = {}, children = []) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') e.className = v;
+      else if (k === 'text') e.textContent = v;
+      else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+      else if (v !== null && v !== undefined) e.setAttribute(k, v);
+    }
+    for (const c of children) {
+      if (c === null || c === undefined) continue;
+      e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+  }
+
+  function renderTotalsGrid(dayIso, totals) {
+    const total = totals.length;
+
+    // depreacated
+    // const columns = Math.min(4, Math.max(1, Math.ceil(total / 18)));
+    // const rowsPerColumn = Math.ceil(total / columns);
+
+
+    // the manual grid 
+    const columns = [[], [], [], []];
+    const unassigned = [];
+
+
+    const grid = el('div', { class: 'totals-grid' });
+    const store = readStockStore();
+
+    for (const t of totals) {
+      if (t.tbl !== null && t.tbl !== undefined && t.pos !== null && t.pos !== undefined) {
+        const col = columns[t.tbl];
+        if (col) col.push(t);
+      } else {
+        unassigned.push(t);
+      }
+    }
+
+    for (let i = 0; i < 4; i++) {
+      columns[i].sort((a, b) => a.pos - b.pos);
+    }
+    columns[3].push(...unassigned);
+
+    for (let i = 0; i < 4; i++) {
+      const chunk = columns[i];
+      if (!chunk.length) continue;
+
+      const table = el('table', { class: 'lo-table' });
+      const thead = el('thead');
+      const trh = el('tr');
+      ['Позиция', 'Не хватает', 'Заказ', 'Заявка с магазина', '0-й рейс', 'Остаток'].forEach(h => trh.appendChild(el('th', { text: h })));
+      thead.appendChild(trh);
+      table.appendChild(thead);
+
+      const tbody = el('tbody');
+      for (const t of chunk) {
+        const ordered_shop = Number(t.quantity_shop || 0);
+        const ordered_special = Number(t.quantity_special || 0);
+        const ordered_priority = Number(t.quantity_priority || 0);
+
+        const tr = el('tr', { 'data-day': dayIso, 'data-item': t.name });
+        const tdName = el('td', { text: t.name });
+
+        const missingTd = el('td', { class: 'num' });
+        const specialTd = el('td', { class: 'num', text: String(ordered_special) });
+        const orderedTd = el('td', { class: 'num', text: String(ordered_shop) });
+        const priorityTd = el('td', { class: 'num', text: String(ordered_priority) });
+
+        const k = stockKey(dayIso, t.name);
+        const stored = Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null;
+        const stockVal = (stored === null || stored === undefined) ? null : Number(stored);
+        const stockInput = el('input', { type: 'number', min: '0', step: '1' });
+        if (stockVal !== null && Number.isFinite(stockVal)) stockInput.value = String(stockVal);
+
+        const remainderTd = el('td', { class: 'num' });
+
+        function recompute() {
+          const parsed = parseStockInput(stockInput.value);
+          const stock = (parsed === null) ? 0 : parsed;
+          const total = ordered_shop + ordered_special + ordered_priority;
+          const missing = Math.max(0, total - stock);
+          const remainder = total - stock;
+          missingTd.textContent = String(missing);
+          remainderTd.textContent = String(remainder);
+        }
+
+        recompute();
+
+        stockInput.addEventListener('input', () => {
+          const parsed = parseStockInput(stockInput.value);
+          const store2 = readStockStore();
+          if (parsed === null) delete store2[k];
+          else store2[k] = parsed;
+          writeStockStore(store2);
+          recompute();
+        });
+
+        // const remainderTd = el('td', { class: 'num' });
+        const stockTd = el('td');
+        stockTd.appendChild(stockInput);
+
+        tr.appendChild(tdName);
+        tr.appendChild(missingTd);
+        tr.appendChild(specialTd);
+        tr.appendChild(orderedTd);
+        tr.appendChild(stockTd);
+        tr.appendChild(priorityTd);
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      grid.appendChild(table);
+    }
+
+    return grid;
+  }
+
+  function renderShops(day, dayIso) {
+    const wrap = el('div', { class: 'shops' });
+    for (const s of (day.shops || [])) {
+      const shopDetails = el('details', { class: 'shop' });
+      const cnt = (s.orders || []).length;
+      const summary = el('summary', { style: 'display:flex; align-items:center; justify-content:space-between;' });
+      summary.appendChild(document.createTextNode(`${s.shop} (${cnt})`));
+      summary.appendChild(el('a', {
+        href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${s.orders[0]?.shop_id || ''}`,
+        text: 'Экспорт в Excel',
+        style: 'font-size:12px; margin-left:12px;',
+        onclick: 'event.stopPropagation()',
+      }));
+      shopDetails.appendChild(summary);
+
+      const body = el('div');
+      for (const o of (s.orders || [])) {
+        const order = el('div', { class: 'order' });
+        const head = el('div', { class: 'order-head' }, [
+          el('div', { text: `${o.created_hhmm} | ${o.cashier_name}` }),
+          el('div', { class: 'muted', text: String(o.id) })
+        ]);
+        order.appendChild(head);
+
+        const ul = el('ul', { class: 'items' });
+        for (const it of (o.items || [])) {
+          const li = el('li');
+          li.appendChild(document.createTextNode(`${it.name} - `));
+          li.appendChild(el('b', { text: String(it.quantity || 0) }));
+          ul.appendChild(li);
+        }
+        order.appendChild(ul);
+        body.appendChild(order);
+      }
+
+      shopDetails.appendChild(body);
+      wrap.appendChild(shopDetails);
+    }
+    return wrap;
+  }
+
+  function renderDays(payload) {
+    clearRoot();
+    const days = (payload && payload.days) ? payload.days : [];
+    if (!days.length) {
+      root.appendChild(el('div', { text: 'Нет заявок' }));
+      return;
+    }
+
+    for (const day of days) {
+      const dayIso = day.date;
+      const details = el('details', { class: 'day' });
+      if (day.is_today) details.open = true;
+
+      const dateLabel = fmtDateRu(dayIso) + (day.is_today ? ' (сегодня)' : '');
+      const sum = el('summary', {}, [
+        el('div', { text: dateLabel }),
+        el('div', { class: 'pill', text: `${day.total_orders} заявок` }),
+      ]);
+      details.appendChild(sum);
+
+      const modes = el('div', { class: 'modes' });
+      const btnTotals = el('button', { type: 'button', class: 'mode-btn active', text: 'Все позиции' });
+      const btnShops = el('button', { type: 'button', class: 'mode-btn', text: 'По магазинам' });
+      modes.appendChild(btnTotals);
+      modes.appendChild(btnShops);
+
+      const tools = el('div', { class: 'day-tools' }, [
+        modes,
+        el('a', { href: `/admin/core/orders/export/totals?order_for=${dayIso}`, text: 'Экспорт totals в Excel' }),
+      ]);
+      details.appendChild(tools);
+
+      const totalsId = `totals-${dayIso}`;
+      const shopsId = `shops-${dayIso}`;
+      const totalsWrap = el('div', { id: totalsId });
+      totalsWrap.appendChild(renderTotalsGrid(dayIso, day.totals || []));
+      const shopsWrap = el('div', { id: shopsId, style: 'display:none;' });
+      shopsWrap.appendChild(renderShops(day, dayIso));
+
+      function setMode(mode) {
+        if (mode === 'totals') {
+          btnTotals.classList.add('active');
+          btnShops.classList.remove('active');
+          totalsWrap.style.display = '';
+          shopsWrap.style.display = 'none';
+        } else {
+          btnTotals.classList.remove('active');
+          btnShops.classList.add('active');
+          totalsWrap.style.display = 'none';
+          shopsWrap.style.display = '';
+        }
+      }
+
+      btnTotals.addEventListener('click', () => setMode('totals'));
+      btnShops.addEventListener('click', () => setMode('shops'));
+
+      details.appendChild(totalsWrap);
+      details.appendChild(shopsWrap);
+      root.appendChild(details);
+    }
+  }
+
+  async function refresh() {
+    statusEl.textContent = 'Обновление...';
+    try {
+      const resp = await fetch(dataUrl, { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const payload = await resp.json();
+      renderDays(payload);
+      statusEl.textContent = `Обновлено: ${nowTimeRu()}`;
+    } catch (e) {
+      statusEl.textContent = 'Ошибка обновления. Нажмите «Обновить» чтобы повторить.';
+    }
+  }
+
+  btn.addEventListener('click', refresh);
+})();
+</script>
+{% endblock %}
+

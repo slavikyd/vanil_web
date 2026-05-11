@@ -22,8 +22,8 @@ async def seed(conn):
 
     await conn.execute(
         """
-        INSERT INTO items (id, name, price, ttl, active)
-        VALUES ($1, 'Test Item', 10.0, 1, TRUE)
+        INSERT INTO items (id, name, active)
+        VALUES ($1, 'Test Item', TRUE)
         """,
         ITEM_ID,
     )

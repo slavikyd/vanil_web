@@ -10,11 +10,14 @@ from app.constants import SESSION_MAX_AGE_SECONDS
 from app.db import connect_db
 from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.logging import setup_logging
+from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.redis import redis
-from app.routes import admin_routes, crud_routes, extra_routes
+from app.routes import crud_routes, extra_routes
 
 logger = logging.getLogger(__name__)
 
+
+SESSION_MAX_AGE_SECONDS = int(os.getenv('SESSION_MAX_AGE_SECONDS'))
 
 setup_logging()
 app = FastAPI()
@@ -25,6 +28,7 @@ app.add_middleware(
     allow_origins=[
         'http://localhost:3000',
         'http://127.0.0.1:3000',
+        'http://xn--90aioe3a8b4a.xn--p1ai',
     ],
     allow_credentials=True,
     allow_methods=['*'],
@@ -65,7 +69,9 @@ async def shutdown():
 
 app.include_router(extra_routes.router)
 app.include_router(crud_routes.router)
-app.include_router(admin_routes.router)
+# app.include_router(admin_routes.router) #self written admin routes disabled in favor of new Django admin 
+
+
 if __name__ == '__main__':
     import uvicorn
 

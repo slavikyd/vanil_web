@@ -18,7 +18,7 @@ from app.routes.deps import get_cart_repo, get_uow
 
 os.environ.setdefault('SESSION_SECRET_KEY', 'test-secret')
 os.environ.setdefault('DBSCHEMA', 'test')
-
+CART_TTL_SECONDS = int(os.getenv('SESSION_MAX_AGE_SECONDS'))
 
 class FakeCartRepo:
     def __init__(self, redis):

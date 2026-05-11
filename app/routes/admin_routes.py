@@ -1,12 +1,12 @@
-"""Admin's routes."""
+"""Admin's routes.""" # DEPRECATED
 
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
+                               StreamingResponse)
 
-import app.http_codes as code
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_uow
 from app.services.admin_service import AdminService
@@ -26,8 +26,6 @@ async def create_item(
     request: Request,
     uow: AsyncpgUnitOfWork = Depends(get_uow),
     name: str = Form(...),
-    price: float = Form(...),
-    ttl: int = Form(...),
     category_id: str = Form(''),
 ):
     """Item entity creation endpoint
@@ -36,24 +34,20 @@ async def create_item(
         request (Request): request
         uow (AsyncpgUnitOfWork, optional): unit of work. Defaults to Depends(get_uow).
         name (str, optional): name of the new item. Defaults to Form(...).
-        price (float, optional): item's price. Defaults to Form(...).
-        ttl (int, optional): time to life of the item. Defaults to Form(...).
 
     Returns:
         RedirectResponse: onto the /admin/items endpoint and status code 302 FOUND
     """
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     parsed_category_id = uuid.UUID(category_id) if category_id else None
     await AdminService.create_item(
         uow=uow,
         name=name,
-        price=price,
-        ttl=ttl,
         category_id=parsed_category_id,
     )
-    return RedirectResponse('/admin/items', status_code=code.FOUND)
+    return RedirectResponse('/admin/items', status_code=status.HTTP_302_FOUND)
 
 
 @router.post('/items/delete')
@@ -73,10 +67,10 @@ async def delete_item(
        RedirectResponse: onto the /admin/items endpoint and status code 302 FOUND
     """
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     await AdminService.delete_item(uow=uow, item_id=uuid.UUID(item_id))
-    return RedirectResponse('/admin/items', status_code=code.FOUND)
+    return RedirectResponse('/admin/items', status_code=status.HTTP_302_FOUND)
 
 
 @router.get('/items', response_class=HTMLResponse)
@@ -94,7 +88,7 @@ async def admin_items(
         admin html page with items: and status code 200 OK
     """
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     items = await AdminService.list_items(uow=uow)
     categories = await AdminService.list_categories(uow=uow)
@@ -110,7 +104,7 @@ async def toggle_items(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     form = await request.form()
 
@@ -134,7 +128,7 @@ async def toggle_items(
     await AdminService.toggle_items(
         uow=uow, active_map=active_map, category_map=category_map
     )
-    return RedirectResponse('/admin/items', status_code=code.FOUND)
+    return RedirectResponse('/admin/items', status_code=status.HTTP_302_FOUND)
 
 
 @router.post('/categories/create')
@@ -144,10 +138,10 @@ async def create_category(
     name: str = Form(...),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     await AdminService.create_category(uow=uow, name=name)
-    return RedirectResponse('/admin/items', status_code=code.FOUND)
+    return RedirectResponse('/admin/items', status_code=status.HTTP_302_FOUND)
 
 
 @router.post('/categories/update')
@@ -158,12 +152,12 @@ async def update_category(
     name: str = Form(...),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     await AdminService.rename_category(
         uow=uow, category_id=uuid.UUID(category_id), name=name
     )
-    return RedirectResponse('/admin/items', status_code=code.FOUND)
+    return RedirectResponse('/admin/items', status_code=status.HTTP_302_FOUND)
 
 
 @router.get('/orders', response_class=HTMLResponse)
@@ -172,7 +166,7 @@ async def admin_orders(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     order_for = request.query_params.get('order_for_date')
     address = request.query_params.get('address')
@@ -198,7 +192,7 @@ async def admin_orders_live(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     return templates.TemplateResponse(
         'admin_orders_live.html',
@@ -214,7 +208,7 @@ async def admin_orders_live_data(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return JSONResponse({'error': 'forbidden'}, status_code=403)
+        return JSONResponse({'error': 'forbidden'}, status_code=status.HTTP_403_FORBIDDEN)
     payload = await AdminService.get_live_orders_payload(uow=uow)
     return JSONResponse(payload)
 
@@ -225,7 +219,7 @@ async def admin_orders_live_archive(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
     return templates.TemplateResponse('admin_orders_archive.html', {'request': request})
 
 
@@ -235,7 +229,7 @@ async def admin_orders_live_archive_data(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return JSONResponse({'error': 'forbidden'}, status_code=403)
+        return JSONResponse({'error': 'forbidden'}, status_code=status.HTTP_403_FORBIDDEN)
     payload = await AdminService.get_live_orders_archive_payload(uow=uow)
     return JSONResponse(payload)
 
@@ -247,7 +241,7 @@ async def export_live_totals(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
     stream = await AdminService.export_live_totals(uow=uow, order_for=order_for)
     return StreamingResponse(
         stream,
@@ -265,11 +259,11 @@ async def delete_order(
     order_id: str = Form(...),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     ok = await AdminService.delete_order(uow=uow, order_id=uuid.UUID(order_id))
     return RedirectResponse(
-        '/admin/orders', status_code=(code.FOUND if ok else code.NOT_FOUND)
+        '/admin/orders', status_code=(status.HTTP_302_FOUND if ok else status.HTTP_404_NOT_FOUND)
     )
 
 
@@ -280,7 +274,7 @@ async def export_orders(
     address: str | None = None,
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     stream = await AdminService.export_orders(uow=uow, address=address)
     return StreamingResponse(
@@ -297,7 +291,7 @@ async def export_by_address(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     stream = await AdminService.export_by_address(uow=uow, order_for=order_for)
     return StreamingResponse(
@@ -316,7 +310,7 @@ async def export_all_items(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
 ):
     if not await _ensure_admin_or_redirect(request, uow):
-        return RedirectResponse("/", status_code=code.FOUND)
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
 
     stream = await AdminService.export_all_items(uow=uow, order_for=order_for)
 

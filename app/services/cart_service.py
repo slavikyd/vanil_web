@@ -23,7 +23,7 @@ class CartService:
     async def set_comment(
         *, cart_repo: RedisCartRepo, session_id: str, item_id: str, comment: str
     ) -> None:
-        text = (comment or '').strip()[:MAX_ITEM_COMMENT_LENGTH]
+        text = (comment or '').strip() #TODO: get rid of this 
         await cart_repo.set_comment(
             session_id=session_id, item_id=item_id, comment=text
         )

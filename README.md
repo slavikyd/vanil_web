@@ -8,8 +8,7 @@ erDiagram
     items {
         uuid id PK
         text name
-        numeric price
-        int ttl
+
         boolean active
     }
 

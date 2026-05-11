@@ -46,9 +46,7 @@ async def load_all_orders_with_items(conn: asyncpg.Connection) -> list:
             """
             SELECT 
                 i.name,
-                oi.quantity,
-                i.price
-            FROM order_items oi
+                oi.quantity            FROM order_items oi
             JOIN items i ON i.id = oi.item_id
             WHERE oi.order_id = $1
             """,

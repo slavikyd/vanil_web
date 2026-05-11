@@ -1,4 +1,5 @@
-import app.http_codes as code
+from fastapi import status
+
 from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID, SHOP_ID
 
 
@@ -23,8 +24,8 @@ async def test_place_order_success(client, mock_db_pool, mock_redis):
         data={'cashierid': ADMIN_ID, 'cashier_id': ADMIN_ID},
         follow_redirects=False,
     )
-    assert resp_login.status_code != code.UNPROCESSABLE_ENTITY, resp_login.text
-    assert resp_login.status_code == code.FOUND
+    assert resp_login.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, resp_login.text
+    assert resp_login.status_code == status.HTTP_302_FOUND
 
     response = await client.post(
         '/place_order',
@@ -36,7 +37,7 @@ async def test_place_order_success(client, mock_db_pool, mock_redis):
         },
         follow_redirects=False,
     )
-    assert response.status_code != code.UNPROCESSABLE_ENTITY, response.text
-    assert response.status_code == code.FOUND
+    assert response.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, response.text
+    assert response.status_code == status.HTTP_302_FOUND
 
     assert mock_redis.delete.await_count >= 1

@@ -1,1 +1,1 @@
-drop table if EXISTS warehouse, items, cashiers, shops, orders cascade;
+drop table if EXISTS items, cashiers, shops, orders, categories cascade;

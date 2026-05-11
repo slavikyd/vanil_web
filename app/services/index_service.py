@@ -1,3 +1,4 @@
+import uuid
 from typing import Any, Dict
 
 from app.infrastructure.redis.cart_repo import RedisCartRepo
@@ -27,7 +28,10 @@ class IndexService:
         cart_repo: RedisCartRepo,
         cashier_id: str,
         session_id: str,
+        preselected_shop_id: uuid.UUID | None = None,
     ) -> Dict[str, Any]:
+        assert uow.shops is not None
+        shops = await uow.shops.list_shops()
         items = await PublicService.list_active_items(uow=uow)
         cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
         comments = await CartService.get_comments(
@@ -43,6 +47,8 @@ class IndexService:
             'comments': comments,
             'cashier_id': cashier_id,
             'is_admin': is_admin,
+            'shops': shops,
+            'preselected_shop_id': str(preselected_shop_id) if preselected_shop_id else None,
         }
 
     @staticmethod

@@ -1,0 +1,1 @@
+alter table orders_items add column order_type text not null default 'Обычный';

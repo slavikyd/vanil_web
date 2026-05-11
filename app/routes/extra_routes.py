@@ -1,6 +1,7 @@
 import time
+import uuid
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.infrastructure.redis.cart_repo import RedisCartRepo
@@ -20,6 +21,7 @@ async def index(
     request: Request,
     uow: AsyncpgUnitOfWork = Depends(get_uow),
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
+    shop_id: uuid.UUID | None = None,
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
@@ -35,6 +37,7 @@ async def index(
         cart_repo=cart_repo,
         cashier_id=cashier_id,
         session_id=session_id,
+        preselected_shop_id=shop_id,
     )
     return templates.TemplateResponse('index.html', {'request': request, **ctx})
 
@@ -56,7 +59,7 @@ async def login(
     request.session['login_at'] = int(time.time())
     get_or_create_session_id(request.session)
 
-    return RedirectResponse('/', status_code=302)
+    return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
 @router.post('/logout')
@@ -69,7 +72,7 @@ async def logout(
         await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
 
     request.session.clear()
-    return RedirectResponse('/', status_code=302)
+    return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
 @router.get('/api/data', response_class=JSONResponse)
@@ -80,7 +83,7 @@ async def get_data_json(
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return JSONResponse({'error': 'Not logged in'}, status_code=401)
+        return JSONResponse({'error': 'Not logged in'}, status_code=status.HTTP_401_UNAUTHORIZED)
 
     session_id = get_or_create_session_id(request.session)
 
@@ -91,3 +94,12 @@ async def get_data_json(
         session_id=session_id,
     )
     return JSONResponse(data)
+
+@router.get('/api/shop-by-device')
+async def shop_by_device(
+    android_id: str,
+    uow: AsyncpgUnitOfWork = Depends(get_uow),
+):
+    assert uow.shops is not None
+    shop_id = await uow.shops.find_by_android_id(android_id=android_id)
+    return JSONResponse({'shop_id': str(shop_id) if shop_id else None})

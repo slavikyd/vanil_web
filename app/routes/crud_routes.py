@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from datetime import date
-
-import app.http_codes as code
+import logging
+from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+import uuid
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow
@@ -14,7 +14,25 @@ from app.services.public_service import PublicService
 from app.settings.config import templates
 
 router = APIRouter(tags=['crud'])
+logger = logging.getLogger(__name__)
 
+def group_orders_by_day(rows: list[dict]) -> dict[str, list[dict]]:
+    grouped: dict[str, list[dict]] = {}
+    for r in rows:
+        oid = r['order_id']
+        day_key = r['order_for'].isoformat()
+        day_bucket = grouped.setdefault(day_key, [])
+        order = next((o for o in day_bucket if o['id'] == oid), None)
+        if order is None:
+            order = {
+                'id': oid,
+                'created': r['created'],
+                'address': r['address'],
+                'items': [],
+            }
+            day_bucket.append(order)
+        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
+    return grouped
 
 @router.post('/add-to-cart')
 async def add_to_cart(
@@ -37,6 +55,8 @@ async def add_to_cart(
         item_id=itemid,
         quantity=quantity,
     )
+    logger.debug('cart item updated', extra={'session_id': session_id, 'item_id': itemid, 'quantity': quantity}) # TODO: possibly remove this debugging log message
+
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
     comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
@@ -84,9 +104,9 @@ async def remove_from_cart(
         cart_repo=cart_repo,
         session_id=session_id,
         item_id=item_id,
-        quantity=0,
+        quantity=0, #TODO remove the magic number
     )
-    return RedirectResponse('/', status_code=code.FOUND)
+    return RedirectResponse('/', status_code=status.HTTP_302_FOUND) 
 
 
 @router.post('/place_order')
@@ -95,26 +115,29 @@ async def place_order(
     uow: AsyncpgUnitOfWork = Depends(get_uow),
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
     order_for: str = Form(...),
-    store_name: str | None = Form(None),
-    tg_id: str | None = Form(None),
+    shop_id: uuid.UUID = Form(...),
+    tg_id: str | None = Form(None), #TODO: DERPRACATED
+    comment: str | None = Form(None),
 ):
     session = request.session
 
     cashier_id = session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     session_id = session.get('session_id')
     if not session_id:
-        return HTMLResponse('Invalid session', status_code=code.BAD_REQUEST)
+        return HTMLResponse('Invalid session', status_code=status.HTTP_400_BAD_REQUEST)
 
-    # Temporarily decouple order creation from Telegram shop id.
-    shop_id = None
 
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
+    logger.info('placing order', extra={'cashier_id': cashier_id, 'cart_size': len(cart), 'order_for': order_for})
     comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
     )
+    order_types = await cart_repo.get_order_types(session_id=session_id)
+    logger.warning(f'DEBUG order_types: {order_types}')
+    logger.warning(f'DEBUG cart keys: {list(cart.keys())}')
 
     try:
         await OrderService.create_order(
@@ -123,20 +146,28 @@ async def place_order(
             shop_id=shop_id,
             cart=cart,
             order_for=order_for,
-            store_name=store_name,
+            comment=comment,
             comments=comments,
+            order_types=order_types,
         )
     except EmptyCartError:
-        return HTMLResponse('Cart is empty', status_code=code.BAD_REQUEST)
+        logger.warning('order attempt with empty cart', extra={'cashier_id': cashier_id})
+        return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
     except InvalidOrderDateError:
-        return HTMLResponse('Invalid order date', status_code=code.BAD_REQUEST)
-    except Exception as e:
-        return HTMLResponse(
-            f'Failed to create order: {e}', status_code=code.INTERNAL_SERVER_ERROR
-        )
+        logger.exception('order creation failed: impossible date', extra={'cashier_id': cashier_id, 'date': order_for})
+        return HTMLResponse('Invalid order date', status_code=status.HTTP_400_BAD_REQUEST)
+    except ValueError as e:
+        logger.warning('order creation failed: invalid shop', extra={'cashier_id': cashier_id, 'error': str(e)})
+        return HTMLResponse(str(e), status_code=status.HTTP_400_BAD_REQUEST)
 
+    except Exception as e:
+        logger.exception('order creation failed', extra={'cashier_id': cashier_id, 'error': str(e)})
+        return HTMLResponse(
+            f'Failed to create order: {e}', status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    logger.info('order placed successfully', extra={'cashier_id': cashier_id, 'order_for': order_for})
     await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
-    return RedirectResponse('/', status_code=code.FOUND)
+    return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
 @router.get('/orders', response_class=HTMLResponse)
@@ -146,36 +177,15 @@ async def orders_view(
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
-    rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
-
-    grouped: dict[str, list[dict]] = {}
-    for r in rows:
-        oid = r['order_id']
-        day_key = r['order_for'].isoformat()
-        day_bucket = grouped.setdefault(day_key, [])
-        order = next((o for o in day_bucket if o['id'] == oid), None)
-        if order is None:
-            order = {
-                'id': oid,
-                'created': r['created'],
-                'address': r['address'],
-                'items': [],
-            }
-            day_bucket.append(order)
-        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
-
-    today_key = date.today().isoformat()
-    today_orders = grouped.get(today_key, [])
-
+    rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='today')
+    grouped = group_orders_by_day(rows)
+    today_orders = grouped.get(date.today().isoformat(), [])
     return templates.TemplateResponse(
         'orders.html',
-        {
-            'request': request,
-            'today_orders': today_orders,
-        },
+        {'request': request, 'today_orders': today_orders},
     )
 
 
@@ -186,40 +196,14 @@ async def orders_archive_view(
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
-    rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
-
-    grouped: dict[str, list[dict]] = {}
-    for r in rows:
-        oid = r['order_id']
-        day_key = r['order_for'].isoformat()
-        day_bucket = grouped.setdefault(day_key, [])
-        order = next((o for o in day_bucket if o['id'] == oid), None)
-        if order is None:
-            order = {
-                'id': oid,
-                'created': r['created'],
-                'address': r['address'],
-                'items': [],
-            }
-            day_bucket.append(order)
-        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
-
-    today_key = date.today().isoformat()
-    # Keep only orders from yesterday and older (dates less than today)
-    past_orders = {
-        k: v for k, v in grouped.items() 
-        if k < today_key  # This will keep all dates before today
-    }
-
+    rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='past')
+    grouped = group_orders_by_day(rows)
     return templates.TemplateResponse(
         'orders_archive.html',
-        {
-            'request': request,
-            'archive_orders': past_orders,  # Now contains only past orders
-        },
+        {'request': request, 'archive_orders': grouped},
     )
 
 @router.get('/orders/future', response_class=HTMLResponse)
@@ -229,38 +213,29 @@ async def orders_future_view(
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
-        return RedirectResponse('/', status_code=code.FOUND)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
     assert uow.orders is not None
-    rows = await uow.orders.cashier_rows(cashier_id=cashier_id)
 
-    grouped: dict[str, list[dict]] = {}
-    for r in rows:
-        oid = r['order_id']
-        day_key = r['order_for'].isoformat()
-        day_bucket = grouped.setdefault(day_key, [])
-        order = next((o for o in day_bucket if o['id'] == oid), None)
-        if order is None:
-            order = {
-                'id': oid,
-                'created': r['created'],
-                'address': r['address'],
-                'items': [],
-            }
-            day_bucket.append(order)
-        order['items'].append({'name': r['item_name'], 'quantity': r['quantity']})
-
-    today_key = date.today().isoformat()
-    # Keep only orders from tomorrow and future (tomorrow and newer)
-    future_orders = {
-        k: v for k, v in grouped.items() 
-        if k > today_key  # This will keep all dates after today
-    }
+    rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='future')
+    grouped = group_orders_by_day(rows)
 
     return templates.TemplateResponse(
         'orders_future.html',
-        {
-            'request': request,
-            'future_orders': future_orders,
-        },
+        {'request': request, 'future_orders': grouped},
     )
+
+@router.post('/set-order-type')
+async def set_order_type(
+    request: Request,
+    cart_repo: RedisCartRepo = Depends(get_cart_repo),
+    item_id: str = Form(...),
+    order_type: str = Form('Обычный'),
+):
+    session_id = get_or_create_session_id(request.session)
+    await cart_repo.set_order_type(
+        session_id=session_id,
+        item_id=item_id,
+        order_type=order_type,
+    )
+    return JSONResponse({'ok': True})

@@ -2,7 +2,8 @@
 Test cart operations with mocked DB and Redis.
 """
 
-import app.http_codes as code
+from fastapi import status
+
 from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID
 
 
@@ -17,7 +18,7 @@ async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
 
     conn.fetchrow.side_effect = fetchrow_side_effect
 
-    conn.fetch.return_value = [{'id': ITEM_ID, 'name': 'Test Item', 'price': 10.0}]
+    conn.fetch.return_value = [{'id': ITEM_ID, 'name': 'Test Item'}]
 
     mock_redis.hgetall.return_value = {str(ITEM_ID): '2'}
 
@@ -26,8 +27,8 @@ async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
         data={'cashierid': ADMIN_ID, 'cashier_id': ADMIN_ID},
         follow_redirects=False,
     )
-    assert resp_login.status_code != code.UNPROCESSABLE_ENTITY, resp_login.text
-    assert resp_login.status_code == code.FOUND
+    assert resp_login.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, resp_login.text
+    assert resp_login.status_code == status.HTTP_302_FOUND
 
     response = await client.post(
         '/add-to-cart',
@@ -38,8 +39,8 @@ async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
         },
         follow_redirects=False,
     )
-    assert response.status_code != code.UNPROCESSABLE_ENTITY, response.text
-    assert response.status_code == code.OK
+    assert response.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, response.text
+    assert response.status_code == status.HTTP_200_OK
 
     data = response.json()
     assert data['cart'][str(ITEM_ID)] == 2
@@ -62,8 +63,8 @@ async def test_add_item_to_cart_no_login(client, mock_db_pool, mock_redis):
         },
         follow_redirects=False,
     )
-    assert response.status_code != code.UNPROCESSABLE_ENTITY, response.text
-    assert response.status_code == code.OK
+    assert response.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, response.text
+    assert response.status_code == status.HTTP_200_OK
 
     data = response.json()
     assert data['cart'][str(ITEM_ID)] == 1
@@ -79,8 +80,8 @@ async def test_remove_from_cart(client, mock_redis):
         },
         follow_redirects=False,
     )
-    assert response.status_code != code.UNPROCESSABLE_ENTITY, response.text
-    assert response.status_code == code.FOUND
+    assert response.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, response.text
+    assert response.status_code == status.HTTP_302_FOUND
 
     assert mock_redis.hdel.await_count >= 1
 
@@ -115,5 +116,5 @@ async def test_place_order_empty_cart(client, mock_db_pool, mock_redis):
         },
         follow_redirects=False,
     )
-    assert response.status_code != code.UNPROCESSABLE_ENTITY, response.text
-    assert response.status_code == code.BAD_REQUEST
+    assert response.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, response.text
+    assert response.status_code == status.HTTP_400_BAD_REQUEST

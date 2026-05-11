@@ -2,27 +2,23 @@ Create EXTENSION if not EXISTS "uuid-ossp";
 
 
 create table shops (
-    id text primary key,
+    id uuid PRIMARY key DEFAULT uuid_generate_v4(),
     phone_number text,
-    address text -- TODO: do it the correct away
+    address text -- TODO: do it the smarter way
     
 );
+
+CREATE TABLE categories (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name text NOT NULL UNIQUE
+);
+
 create table items (
 	id uuid primary key default uuid_generate_v4(),
     name text,
-    price float,
-    ttl int -- in days
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    category uuid REFERENCES categories (id)
 );
-
-create table warehouse (
-    id uuid primary key default uuid_generate_v4(),
-    item_id uuid references items (id),
-    quantity INT,
-    is_expired bool default False,
-    supplied TIMESTAMP default now(),
-    is_imported_from_db bool DEFAULT True
-);
-
 
 
 
@@ -36,8 +32,10 @@ create table cashiers (
 create table orders (
     id uuid primary key default uuid_generate_v4(),
     created timestamp default now(),
-    shop_id text REFERENCES shops (id),
+    shop_id uuid REFERENCES shops (id),
     cashier_id text REFERENCES cashiers (id),
+    comment text,
+    order_for date NOT NULL DEFAULT CURRENT_DATE,
     address text
 );
 
@@ -45,13 +43,14 @@ create table orders_items (
     order_id uuid references orders (id),
     item_id uuid REFERENCES items (id),
     quantity int,
+    comment text,
     PRIMARY key(order_id, item_id)
 );
 
 
 
 create table shops_orders (
-    shop_id text REFERENCES shops (id),
+    shop_id uuid REFERENCES shops (id),
     order_id uuid REFERENCES orders (id),
     PRIMARY key(shop_id, order_id)
 );

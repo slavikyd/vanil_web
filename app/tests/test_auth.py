@@ -1,4 +1,5 @@
-import app.http_codes as code
+from fastapi import status
+
 from app.tests.fixtures.constants import ADMIN_ID
 
 
@@ -20,5 +21,5 @@ async def test_login_success(client, mock_db_pool):
         follow_redirects=False,
     )
 
-    assert response.status_code != code.UNPROCESSABLE_ENTITY, response.text
-    assert response.status_code == code.FOUND
+    assert response.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, response.text
+    assert response.status_code == status.HTTP_302_FOUND
