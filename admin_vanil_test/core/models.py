@@ -91,6 +91,8 @@ class Orders(models.Model):
     address = models.TextField(blank=True, null=True)
     order_for = models.DateField()
     comment = models.TextField(null=True, blank=True, max_length=255)
+    disabled = models.BooleanField(default=False)
+    completed = models.BooleanField(default=False)
 
     class Meta:
         managed = True

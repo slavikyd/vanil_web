@@ -17,7 +17,7 @@ from .models import *
 from itertools import groupby
 from operator import itemgetter
 import logging
-
+from fastapi import status
 logger = logging.getLogger(__name__)
 
 PRIORITY_GROUP_NAME = "0-й рейс"
@@ -115,7 +115,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             orders_payload = []
             for o in shop_orders:
                 items_payload = [
-                    {"name": oi.item.name, "quantity": int(oi.quantity or 0)}
+                    {"name": oi.item.name, "quantity": int(oi.quantity or 0), "order_type": getattr(oi, "order_type", "Обычный")}
                     for oi in o.ordersitems_set.all()
                     if getattr(oi.item, "name", None)
                 ]
@@ -127,6 +127,8 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
                     "cashier_name": getattr(o.cashier, "full_name", "") if o.cashier_id else "",
                     "shop_id": getattr(o, "shop_id", None),
                     "items": items_payload,
+                    'disabled': o.disabled,
+                    'completed': o.completed,
                 })
             
             shops_payload.append({"shop_id": shop_key, "shop": shop_lookup.get(shop_key, shop_key), "orders": orders_payload})
@@ -174,6 +176,14 @@ class OrdersAdmin(admin.ModelAdmin):
             path("export/shop/",
                 self.admin_site.admin_view(self.export_shop_view),
                 name="orders_export_shop"),
+
+            path("order/<str:order_id>/toggle-disabled/",
+                self.admin_site.admin_view(self.toggle_disabled_view),
+                name="orders_toggle_disabled"),
+
+            path("order/<str:order_id>/toggle-completed/",
+                self.admin_site.admin_view(self.toggle_completed_view),
+                name="orders_toggle_completed"),
         ]
 
         return custom + urls
@@ -181,13 +191,12 @@ class OrdersAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
 
         ctx = {
-            **self.admin_site.each_context(request), 
+            **self.admin_site.each_context(request),
             "title": "Заявки",
             "data_url": "live-data/",
             "archive_url": "archive/",
             "export_url": "export/totals/",
             "show_archive_link": True,
-            "archive_url": "archive/",
             "archive_heading": "Архив",
             "opts": self.model._meta,
             **(extra_context or {}),
@@ -205,10 +214,33 @@ class OrdersAdmin(admin.ModelAdmin):
             **self.admin_site.each_context(request),
             "title": "Архив заявок",
             "data_url": "data/",
-            "live_url": "../", 
+            "live_url": "../",
+            "show_live_link": True,
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/orders/archive.html", ctx)
+
+    def toggle_disabled_view(self, request: HttpRequest, order_id: str) -> JsonResponse:
+        if request.method != 'POST':
+            return JsonResponse({'error': 'POST required'}, status=status.HTTP_405_METHOD_NOT_ALLOWED )
+        try:
+            order = Orders.objects.get(id=order_id)
+            order.disabled = not order.disabled
+            order.save(update_fields=['disabled'])
+            return JsonResponse({'disabled': order.disabled})
+        except Orders.DoesNotExist:
+            return JsonResponse({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    def toggle_completed_view(self, request: HttpRequest, order_id: str) -> JsonResponse:
+        if request.method != 'POST':
+            return JsonResponse({'error': 'POST required'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        try:
+            order = Orders.objects.get(id=order_id)
+            order.completed = not order.completed
+            order.save(update_fields=['completed'])
+            return JsonResponse({'completed': order.completed})
+        except Orders.DoesNotExist:
+            return JsonResponse({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def archive_data_view(self, request: HttpRequest) -> JsonResponse:
         """Returns JSON for the archive page (everything older than 5 days)."""
@@ -218,7 +250,7 @@ class OrdersAdmin(admin.ModelAdmin):
     def export_totals_view(self, request: HttpRequest) -> HttpResponse:
         order_for = parse_date(request.GET.get("order_for") or "")
         if not order_for:
-            return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=400)
+            return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=status.HTTP_400_BAD_REQUEST)
 
         all_items = list(
             Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')

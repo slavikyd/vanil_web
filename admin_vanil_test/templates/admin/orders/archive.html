@@ -111,6 +111,11 @@
     return e;
   }
 
+  function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? v[2] : null;
+  }
+
   function renderTotalsGrid(dayIso, totals) {
     const total = totals.length;
 
@@ -213,19 +218,21 @@
   }
 
   function buildShopTotals(shopData, allItems) {
-  const totals_special = {};
-  const totals_plain = {};
-  for (const item of allItems) totals_special[item.name] = totals_plain[item.name] = 0;
+    const totals_special = {};
+    const totals_plain = {};
+    for (const item of allItems) totals_special[item.name] = totals_plain[item.name] = 0;
 
-  for (const o of (shopData ? shopData.orders : [])) {
-    for (const it of (o.items || [])) {
-      // items payload doesn't carry order_type per item at this level,
-      // so we sum everything into plain for the shop summary
-      totals_plain[it.name] = (totals_plain[it.name] || 0) + (it.quantity || 0);
+    for (const o of (shopData ? shopData.orders.filter(o => !o.disabled) : [])) {
+      for (const it of (o.items || [])) {
+        if (it.order_type === 'Спец. заказ') {
+          totals_special[it.name] = (totals_special[it.name] || 0) + (it.quantity || 0);
+        } else {
+          totals_plain[it.name] = (totals_plain[it.name] || 0) + (it.quantity || 0);
+        }
+      }
     }
+    return { totals_special, totals_plain };
   }
-  return { totals_special, totals_plain };
-}
 
 function renderShopSummary(dayIso, shopData, allItems) {
   // Group items by tbl same as main grid
@@ -252,16 +259,16 @@ function renderShopSummary(dayIso, shopData, allItems) {
     const table = el('table', { class: 'lo-table' });
     const thead = el('thead');
     const trh = el('tr');
-    ['Позиция', 'Количество'].forEach(h => trh.appendChild(el('th', { text: h })));
+    ['Позиция', 'Обычный', 'Спец. заказ'].forEach(h => trh.appendChild(el('th', { text: h })));
     thead.appendChild(trh);
     table.appendChild(thead);
 
     const tbody = el('tbody');
     for (const item of chunk) {
-      const qty = totals_plain[item.name] || 0;
       const tr = el('tr');
       tr.appendChild(el('td', { text: item.name }));
-      tr.appendChild(el('td', { class: 'num', text: String(qty) }));
+      tr.appendChild(el('td', { class: 'num', text: String(totals_plain[item.name] || 0) }));
+      tr.appendChild(el('td', { class: 'num', text: String(totals_special[item.name] || 0) }));
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -312,10 +319,23 @@ function renderShops(day, dayIso, allItems) {
       pane.appendChild(el('div', { text: 'Нет заявок', style: 'color:var(--body-quiet-color); margin-top:8px;' }));
     } else {
       for (const o of shopData.orders) {
-        const order = el('div', { class: 'order' });
+        const order = el('div', { class: 'order', style: o.disabled ? 'opacity:0.45;' : '' });
+        const disableBtn = el('button', { type: 'button', class: 'mode-btn', text: o.disabled ? 'Включить' : 'Отложить', style: 'font-size:11px; padding:2px 7px;' });
+        const completeBtn = el('button', { type: 'button', class: 'mode-btn', text: o.completed ? '✓ Выполнен' : 'Выполнить', style: `font-size:11px; padding:2px 7px;${o.completed ? ' background:var(--primary); color:#fff;' : ''}` });
+
+        disableBtn.addEventListener('click', async () => {
+          const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-disabled/`, { method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')} });
+          if (resp.ok) btn.click();
+        });
+
+        completeBtn.addEventListener('click', async () => {
+          const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-completed/`, { method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')} });
+          if (resp.ok) btn.click();
+        });
+
         order.appendChild(el('div', { class: 'order-head' }, [
           el('div', { text: `${o.created_hhmm} | ${o.cashier_name}` }),
-          el('div', { class: 'muted', text: String(o.id) }),
+          el('div', {}, [disableBtn, completeBtn]),
         ]));
         const ul = el('ul', { class: 'items' });
         for (const it of (o.items || [])) {
@@ -422,6 +442,7 @@ function renderShops(day, dayIso, allItems) {
   }
 
   btn.addEventListener('click', refresh);
+  refresh();
 })();
 </script>
 {% endblock %}
