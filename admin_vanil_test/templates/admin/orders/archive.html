@@ -222,7 +222,7 @@
     const totals_plain = {};
     for (const item of allItems) totals_special[item.name] = totals_plain[item.name] = 0;
 
-    for (const o of (shopData ? shopData.orders.filter(o => !o.disabled) : [])) {
+    for (const o of (shopData ? shopData.orders.filter(o => !o.disabled && !o.completed) : [])) {
       for (const it of (o.items || [])) {
         if (it.order_type === 'Спец. заказ') {
           totals_special[it.name] = (totals_special[it.name] || 0) + (it.quantity || 0);
@@ -376,9 +376,8 @@ function renderShops(day, dayIso, allItems) {
           });
           if (resp.ok) {
             order.remove();
-            // recompute summary
+            shopData.orders = shopData.orders.filter(ord => ord.id !== o.id);
             const newGrid = renderShopSummary(dayIso, shopData, allItems);
-            const oldGrid = pane.querySelector('.totals-grid');
             if (oldGrid) pane.replaceChild(newGrid, oldGrid);
           }
         });
