@@ -56,7 +56,7 @@ class Cashiers(models.Model):
         managed = True
         db_table = 'cashiers'
         verbose_name = 'Кассир'
-        plural_name = 'Кассиры'
+        verbose_name_plural = 'Кассиры'
 
 
 class Categories(models.Model):
@@ -68,7 +68,7 @@ class Categories(models.Model):
         managed = True
         db_table = 'categories'
         verbose_name = 'Категория'
-        plural_name = 'Категории'
+        verbose_name_plural = 'Категории'
 
 
 class Items(models.Model):
@@ -86,7 +86,7 @@ class Items(models.Model):
         managed = True
         db_table = 'items'
         verbose_name = 'Позиция'
-        plural_name = 'Позиции'
+        verbose_name_plural = 'Позиции'
 
 
 class Orders(models.Model):
@@ -104,7 +104,7 @@ class Orders(models.Model):
         managed = True
         db_table = 'orders'
         verbose_name = 'Заказ'
-        plural_name = 'Заказы'
+        verbose_name_plural = 'Заказы'
 
 
 class OrdersItems(models.Model):
@@ -120,7 +120,7 @@ class OrdersItems(models.Model):
         managed = True
         db_table = 'orders_items'
         verbose_name = 'Товар к заказу'
-        plural_name = 'Товары к заказам'
+        verbose_name_plural = 'Товары к заказам'
 
 class ShopsGroups(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
@@ -133,7 +133,7 @@ class ShopsGroups(models.Model):
         managed = True
         db_table = 'shops_groups'
         verbose_name = 'Группа магазинов'
-        plural_name = 'Группы магазинов'
+        verbose_name_plural = 'Группы магазинов'
 
 class Shops(models.Model):
     id = models.TextField(primary_key=True)
@@ -148,7 +148,7 @@ class Shops(models.Model):
         managed = True
         db_table = 'shops'
         verbose_name = 'Магазин'
-        plural_name = 'Магазины'
+        verbose_name_plural = 'Магазины'
 
 
 class ShopsOrders(models.Model):
