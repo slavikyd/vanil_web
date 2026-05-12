@@ -184,6 +184,10 @@ class OrdersAdmin(admin.ModelAdmin):
             path("order/<str:order_id>/toggle-completed/",
                 self.admin_site.admin_view(self.toggle_completed_view),
                 name="orders_toggle_completed"),
+
+            path("order/<str:order_id>/delete/",
+                self.admin_site.admin_view(self.delete_order_view),
+                name="orders_delete_order"),
         ]
 
         return custom + urls
@@ -207,6 +211,17 @@ class OrdersAdmin(admin.ModelAdmin):
         """Returns JSON for the live page (newest 5 days)."""
         payload = _orders_payload(max_days=5, offset_days=0)
         return JsonResponse(payload)
+    
+    def delete_order_view(self, request: HttpRequest, order_id: str) -> JsonResponse:
+        if request.method != 'POST':
+            return JsonResponse({'error': 'POST required'}, status=405)
+        try:
+            order = Orders.objects.get(id=order_id)
+            OrdersItems.objects.filter(order=order).delete()
+            order.delete()
+            return JsonResponse({'deleted': True})
+        except Orders.DoesNotExist:
+            return JsonResponse({'error': 'not found'}, status=404)
 
     def archive_view(self, request: HttpRequest) -> HttpResponse:
         """Renders the archive HTML page (orders older than 5 days)."""

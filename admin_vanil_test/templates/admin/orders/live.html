@@ -319,24 +319,82 @@ function renderShops(day, dayIso, allItems) {
       pane.appendChild(el('div', { text: 'Нет заявок', style: 'color:var(--body-quiet-color); margin-top:8px;' }));
     } else {
       for (const o of shopData.orders) {
-        const order = el('div', { class: 'order', style: o.disabled ? 'opacity:0.45;' : '' });
-        const disableBtn = el('button', { type: 'button', class: 'mode-btn', text: o.disabled ? 'Включить' : 'Отложить', style: 'font-size:11px; padding:2px 7px;' });
-        const completeBtn = el('button', { type: 'button', class: 'mode-btn', text: o.completed ? '✓ Выполнен' : 'Выполнить', style: `font-size:11px; padding:2px 7px;${o.completed ? ' background:var(--primary); color:#fff;' : ''}` });
+        const order = el('div', { class: 'order', style: o.disabled ? 'opacity:0.45;' : '', id: `order-${o.id}` });
+        const disableCb = el('input', { type: 'checkbox', title: 'Не учитывать в сумме' });
+        disableCb.checked = o.disabled;
 
-        disableBtn.addEventListener('click', async () => {
-          const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-disabled/`, { method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')} });
-          if (resp.ok) btn.click(); // refresh current tab by re-clicking refresh
+        const completeBtn = el('button', {
+          type: 'button',
+          class: 'mode-btn',
+          text: o.completed ? '✓ Выполнен' : 'Выполнить',
+          style: `font-size:12px; padding:4px 10px;${o.completed ? ' background:var(--primary); color:#fff; border-color:var(--primary);' : ''}`,
+        });
+
+        const deleteBtn = el('button', {
+          type: 'button',
+          class: 'mode-btn',
+          text: 'Удалить',
+          style: 'font-size:12px; padding:4px 10px; color:#dc3545; border-color:#dc3545;',
+        });
+
+        disableCb.addEventListener('change', async () => {
+          const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-disabled/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            o.disabled = data.disabled;
+            order.style.opacity = data.disabled ? '0.45' : '';
+            // recompute summary in place
+            const newGrid = renderShopSummary(dayIso, shopData, allItems);
+            const oldGrid = pane.querySelector('.totals-grid');
+            if (oldGrid) pane.replaceChild(newGrid, oldGrid);
+          }
         });
 
         completeBtn.addEventListener('click', async () => {
-          const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-completed/`, { method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')} });
-          if (resp.ok) btn.click();
+          const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-completed/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            o.completed = data.completed;
+            completeBtn.textContent = data.completed ? '✓ Выполнен' : 'Выполнить';
+            completeBtn.style.background = data.completed ? 'var(--primary)' : '';
+            completeBtn.style.color = data.completed ? '#fff' : '';
+            completeBtn.style.borderColor = data.completed ? 'var(--primary)' : '';
+          }
+        });
+
+        deleteBtn.addEventListener('click', async () => {
+          if (!confirm('Удалить заказ?')) return;
+          const resp = await fetch(`/admin/core/orders/order/${o.id}/delete/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+          });
+          if (resp.ok) {
+            order.remove();
+            // recompute summary
+            const newGrid = renderShopSummary(dayIso, shopData, allItems);
+            const oldGrid = pane.querySelector('.totals-grid');
+            if (oldGrid) pane.replaceChild(newGrid, oldGrid);
+          }
         });
 
         order.appendChild(el('div', { class: 'order-head' }, [
           el('div', { text: `${o.created_hhmm} | ${o.cashier_name}` }),
-          el('div', {}, [disableBtn, completeBtn]),
+          el('div', { style: 'display:flex; align-items:center; gap:8px;' }, [
+            el('label', { style: 'display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;' }, [
+              disableCb,
+              document.createTextNode('Не учитывать'),
+            ]),
+            completeBtn,
+            deleteBtn,
+          ]),
         ]));
+
         const ul = el('ul', { class: 'items' });
         for (const it of (o.items || [])) {
           const li = el('li');
