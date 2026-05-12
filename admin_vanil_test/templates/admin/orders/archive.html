@@ -299,6 +299,7 @@ function renderShops(day, dayIso, allItems) {
       class: 'mode-btn' + (idx === 0 ? ' active' : ''),
       text: shop.address,
       style: hasOrders ? '' : 'opacity:0.45;',
+      'data-shop-id': shop.id,
     });
 
     const pane = el('div', { style: idx === 0 ? '' : 'display:none;' });
@@ -335,7 +336,7 @@ function renderShops(day, dayIso, allItems) {
           class: 'mode-btn',
           text: 'Удалить',
           style: 'font-size:12px; padding:4px 10px; color:#dc3545; border-color:#dc3545;',
-        });
+        });https://claude.ai/chat/c665e1f3-d29c-4a97-9293-0d831c91eb08
 
         disableCb.addEventListener('change', async () => {
           const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-disabled/`, {
@@ -432,7 +433,7 @@ function renderShops(day, dayIso, allItems) {
 
     for (const day of days) {
       const dayIso = day.date;
-      const details = el('details', { class: 'day' });
+      const details = el('details', { class: 'day', 'data-day': dayIso });
       if (day.is_today) details.open = true;
 
       const dateLabel = fmtDateRu(dayIso) + (day.is_today ? ' (сегодня)' : '');
@@ -485,6 +486,10 @@ function renderShops(day, dayIso, allItems) {
   }
 
   async function refresh() {
+    const activeDay = document.querySelector('.day[open]')?.dataset?.day;
+    const activeMode = document.querySelector('.day[open] .mode-btn.active')?.textContent;
+    const activeShop = document.querySelector('.day[open] .mode-btn.active[data-shop-id]')?.dataset?.shopId;
+
     statusEl.textContent = 'Обновление...';
     try {
       const resp = await fetch(dataUrl, { cache: 'no-store' });
@@ -493,7 +498,22 @@ function renderShops(day, dayIso, allItems) {
       window._allShops = payload.all_shops || [];
       renderDays(payload);
       statusEl.textContent = `Обновлено: ${nowTimeRu()}`;
+
+      if (activeMode === 'По магазинам') {
+        const dayEl = activeDay
+          ? [...document.querySelectorAll('.day')].find(d => d.dataset.day === activeDay)
+          : document.querySelector('.day[open]');
+        if (dayEl) {
+          const shopsBtn = [...dayEl.querySelectorAll('.mode-btn')].find(b => b.textContent === 'По магазинам');
+          if (shopsBtn) shopsBtn.click();
+          if (activeShop) {
+            const shopBtn = [...dayEl.querySelectorAll('.mode-btn[data-shop-id]')].find(b => b.dataset.shopId === activeShop);
+            if (shopBtn) shopBtn.click();
+          }
+        }
+      }
     } catch (e) {
+      console.error(e);
       statusEl.textContent = 'Ошибка обновления. Нажмите «Обновить» чтобы повторить.';
     }
   }
