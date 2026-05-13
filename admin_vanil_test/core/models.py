@@ -8,6 +8,7 @@
 import uuid
 
 from django.db import models
+from django.utils import timezone
 
 
 class YoyoLog(models.Model):
@@ -46,8 +47,8 @@ class YoyoVersion(models.Model):
 
 class Cashiers(models.Model):
     id = models.TextField(primary_key=True, default=uuid.uuid4)
-    full_name = models.TextField(blank=True, null=True)
-    is_admin = models.BooleanField(blank=True, null=True)
+    full_name = models.TextField(max_length=100)
+    is_admin = models.BooleanField(default=False)
 
     def __str__(self):
         return self.full_name
@@ -73,7 +74,7 @@ class Categories(models.Model):
 
 class Items(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    name = models.TextField(blank=True, null=True)
+    name = models.TextField(max_length=100)
     active = models.BooleanField()
     category = models.ForeignKey(Categories, models.DO_NOTHING, db_column='category', blank=True, null=True)
     tbl = models.IntegerField(null=True, blank=True)
@@ -91,10 +92,10 @@ class Items(models.Model):
 
 class Orders(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    created = models.DateTimeField(blank=True, null=True)
+    created = models.DateTimeField(default=timezone.now())
     shop = models.ForeignKey('Shops', models.DO_NOTHING, blank=True, null=True)
     cashier = models.ForeignKey(Cashiers, models.DO_NOTHING, blank=True, null=True)
-    address = models.TextField(blank=True, null=True)
+    address = models.TextField()
     order_for = models.DateField()
     comment = models.TextField(null=True, blank=True, max_length=255)
     disabled = models.BooleanField(default=False)
@@ -124,7 +125,7 @@ class OrdersItems(models.Model):
 
 class ShopsGroups(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    name = models.TextField(null=True, blank=True)
+    name = models.TextField(max_length=100)
 
     def __str__(self):
         return self.name or str(self.id)
@@ -137,8 +138,8 @@ class ShopsGroups(models.Model):
 
 class Shops(models.Model):
     id = models.TextField(primary_key=True)
-    phone_number = models.TextField(blank=True, null=True)
-    address = models.TextField(blank=True, null=True)
+    phone_number = models.TextField()
+    address = models.TextField(max_length=255)
     shop_group = models.ForeignKey(ShopsGroups, models.DO_NOTHING, blank=True, null=True, db_column='shop_group')
     android_id = models.TextField(blank=True, null=True)
 
