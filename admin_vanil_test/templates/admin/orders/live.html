@@ -299,6 +299,7 @@ function renderShops(day, dayIso, allItems) {
       class: 'mode-btn' + (idx === 0 ? ' active' : ''),
       text: shop.address,
       style: hasOrders ? '' : 'opacity:0.45;',
+      'data-shop-id': shop.id,
     });
 
     const pane = el('div', { style: idx === 0 ? '' : 'display:none;' });
