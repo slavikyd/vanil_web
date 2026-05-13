@@ -315,6 +315,15 @@ function renderShops(day, dayIso, allItems) {
       style: 'display:inline-block; margin: 8px 0 12px; font-size:12px;',
     }));
 
+
+    // print link
+    pane.appendChild(el('a', {
+      href: `/admin/core/orders/print/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
+      text: 'Печать',
+      target: '_blank',
+      style: 'display:inline-block; margin: 8px 0 12px 8px; font-size:12px;',
+    }));
+
     // Orders list
     if (!shopData || !shopData.orders.length) {
       pane.appendChild(el('div', { text: 'Нет заявок', style: 'color:var(--body-quiet-color); margin-top:8px;' }));
@@ -452,6 +461,7 @@ function renderShops(day, dayIso, allItems) {
       const tools = el('div', { class: 'day-tools' }, [
         modes,
         el('a', { href: `/admin/core/orders/export/totals?order_for=${dayIso}`, text: 'Экспорт totals в Excel' }),
+        el('a', { href: `/admin/core/orders/print/totals/?order_for=${dayIso}`, text: 'Печать', target: '_blank' }),
       ]);
       details.appendChild(tools);
 

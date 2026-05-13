@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime
 from io import BytesIO
 from typing import Any
@@ -5,19 +6,15 @@ from typing import Any
 from django.contrib import admin
 from django.db.models import Prefetch
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
-from django.urls import path, re_path
+from django.urls import path
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from fastapi import status
 from openpyxl import Workbook
 
 from .models import *
 
-from itertools import groupby
-from operator import itemgetter
-import logging
-from fastapi import status
 logger = logging.getLogger(__name__)
 
 PRIORITY_GROUP_NAME = "0-й рейс"
@@ -153,6 +150,138 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
 class OrdersAdmin(admin.ModelAdmin):
     change_list_template = "admin/orders/live.html"
 
+    def print_totals_view(self, request: HttpRequest) -> HttpResponse:
+        order_for = parse_date(request.GET.get("order_for") or "")
+        if not order_for:
+            return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=400)
+
+        all_items = list(
+            Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')
+        )
+        all_items = [i for i in all_items if i['name']]
+
+        totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_priority: dict[str, int] = {i['name']: 0 for i in all_items}
+
+        for oi in (OrdersItems.objects
+                .select_related("item", 'order__shop__shop_group')
+                .filter(order__order_for=order_for)):
+            name = getattr(oi.item, "name", None)
+            if not name:
+                continue
+            qty = int(oi.quantity or 0)
+            order_type = getattr(oi, 'order_type', 'Обычный')
+            is_priority = (
+                getattr(getattr(getattr(oi, 'order', None), 'shop', None), 'shop_group', None) is not None
+                and getattr(oi.order.shop.shop_group, 'name', None) == PRIORITY_GROUP_NAME
+            )
+            if is_priority:
+                totals_priority[name] = totals_priority.get(name, 0) + qty
+            elif order_type == 'Спец. заказ':
+                totals_special[name] = totals_special.get(name, 0) + qty
+            else:
+                totals_plain[name] = totals_plain.get(name, 0) + qty
+
+        tbl_groups: dict[int, list] = {}
+        for item in all_items:
+            tbl = item['tbl'] if item['tbl'] is not None else 3
+            tbl_groups.setdefault(tbl, []).append(item)
+
+        tables = []
+        for tbl_index in range(4):
+            items = tbl_groups.get(tbl_index, [])
+            tables.append([
+                {
+                    'name': i['name'],
+                    'plain': totals_plain.get(i['name'], 0),
+                    'special': totals_special.get(i['name'], 0),
+                    'priority': totals_priority.get(i['name'], 0),
+                }
+                for i in items
+            ])
+
+        ctx = {
+            'order_for': order_for,
+            'tables': tables,
+        }
+        return TemplateResponse(request, "admin/orders/print_totals.html", ctx)
+
+    def print_shop_view(self, request: HttpRequest) -> HttpResponse:
+        order_for = parse_date(request.GET.get("order_for") or "")
+        shop_id = request.GET.get("shop_id") or ""
+        if not order_for or not shop_id:
+            return HttpResponse("Missing ?order_for=YYYY-MM-DD&shop_id=...", status=400)
+
+        try:
+            shop = Shops.objects.get(id=shop_id)
+        except Shops.DoesNotExist:
+            return HttpResponse("Shop not found", status=404)
+
+        all_items = list(
+            Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')
+        )
+        all_items = [i for i in all_items if i['name']]
+
+        totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
+        item_comments: dict[str, str] = {}
+        order_comments: list[str] = []
+
+        orders = (
+            Orders.objects
+            .filter(shop_id=shop_id, order_for=order_for)
+            .prefetch_related(
+                Prefetch(
+                    "ordersitems_set",
+                    queryset=OrdersItems.objects.select_related("item").order_by("item__tbl", "item__pos", "item__name")
+                )
+            )
+            .order_by("created")
+        )
+
+        for order in orders:
+            if order.comment:
+                order_comments.append(order.comment)
+            for oi in order.ordersitems_set.all():
+                name = getattr(oi.item, "name", None)
+                if not name:
+                    continue
+                qty = int(oi.quantity or 0)
+                order_type = getattr(oi, "order_type", "Обычный")
+                if order_type == "Спец. заказ":
+                    totals_special[name] = totals_special.get(name, 0) + qty
+                else:
+                    totals_plain[name] = totals_plain.get(name, 0) + qty
+                if oi.comment:
+                    item_comments[name] = oi.comment
+
+        tbl_groups: dict[int, list] = {}
+        for item in all_items:
+            tbl = item['tbl'] if item['tbl'] is not None else 3
+            tbl_groups.setdefault(tbl, []).append(item)
+
+        tables = []
+        for tbl_index in range(4):
+            items = tbl_groups.get(tbl_index, [])
+            tables.append([
+                {
+                    'name': i['name'],
+                    'plain': totals_plain.get(i['name'], 0),
+                    'special': totals_special.get(i['name'], 0),
+                    'comment': item_comments.get(i['name'], ''),
+                }
+                for i in items
+            ])
+
+        ctx = {
+            'order_for': order_for,
+            'shop': shop,
+            'tables': tables,
+            'order_comments': order_comments,
+        }
+        return TemplateResponse(request, "admin/orders/print_shop.html", ctx)
+
     def get_urls(self):
 
         urls = super().get_urls()
@@ -188,6 +317,14 @@ class OrdersAdmin(admin.ModelAdmin):
             path("order/<str:order_id>/delete/",
                 self.admin_site.admin_view(self.delete_order_view),
                 name="orders_delete_order"),
+
+            path("print/totals/",
+                self.admin_site.admin_view(self.print_totals_view),
+                name="orders_print_totals"),
+
+            path("print/shop/",
+                self.admin_site.admin_view(self.print_shop_view),
+                name="orders_print_shop"),
         ]
 
         return custom + urls

@@ -144,6 +144,8 @@ class Shops(models.Model):
 
     def __str__(self):
         return self.address
+    
+
     class Meta:
         managed = True
         db_table = 'shops'

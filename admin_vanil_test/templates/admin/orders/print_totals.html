@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Итоги {{ order_for }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 1cm;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .col {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 3px 6px;
+        }
+        th {
+            background: #f0f0f0;
+            text-align: left;
+        }
+        td:not(:first-child) {
+            text-align: right;
+        }
+        @media print {
+            @page { margin: 1cm; }
+        }
+    </style>
+</head>
+<body>
+<div class="grid">
+    <div class="col">
+        {% for table in tables|slice:":2" %}
+        {% if table %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Позиция</th>
+                    <th>Заказ с магазина</th>
+                    <th>Заказ</th>
+                    <th>Юбик</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in table %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.plain }}</td>
+                    <td>{{ item.special }}</td>
+                    <td>{{ item.priority }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% endfor %}
+    </div>
+    <div class="col">
+        {% for table in tables|slice:"2:" %}
+        {% if table %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Позиция</th>
+                    <th>Заказ с магазина</th>
+                    <th>Заказ</th>
+                    <th>Юбик</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in table %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.plain }}</td>
+                    <td>{{ item.special }}</td>
+                    <td>{{ item.priority }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+<script>window.print();</script>
+</body>
+</html>

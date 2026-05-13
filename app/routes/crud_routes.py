@@ -1,8 +1,10 @@
-from datetime import date
 import logging
+import uuid
+from datetime import date
+
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-import uuid
+
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow

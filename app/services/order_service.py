@@ -1,9 +1,9 @@
+import logging
 import uuid
 from datetime import datetime
 
 from app.infrastructure.uow import AsyncpgUnitOfWork
 
-import logging
 logger = logging.getLogger(__name__)
 class EmptyCartError(Exception):
     pass

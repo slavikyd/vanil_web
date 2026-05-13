@@ -1,9 +1,9 @@
+import logging
 import uuid
 from datetime import date
 from typing import Literal
 
 from asyncpg import Connection
-import logging
 
 
 class OrdersRepo:
