@@ -388,7 +388,8 @@ function renderShops(day, dayIso, allItems) {
             order.remove();
             shopData.orders = shopData.orders.filter(ord => ord.id !== o.id);
             const newGrid = renderShopSummary(dayIso, shopData, allItems);
-            if (oldGrid) pane.replaceChild(newGrid, oldGrid);
+            const oldGrid = pane.querySelector('.totals-grid');
+            if (oldGrid) pane.replaceChild(newGrid, oldGrid); 
           }
         });
 
@@ -460,7 +461,7 @@ function renderShops(day, dayIso, allItems) {
 
       const tools = el('div', { class: 'day-tools' }, [
         modes,
-        el('a', { href: `/admin/core/orders/export/totals?order_for=${dayIso}`, text: 'Экспорт totals в Excel' }),
+        el('a', { href: `/admin/core/orders/export/totals/?order_for=${dayIso}`, text: 'Экспорт totals в Excel' }),
         el('a', { href: `/admin/core/orders/print/totals/?order_for=${dayIso}`, text: 'Печать', target: '_blank' }),
       ]);
       details.appendChild(tools);

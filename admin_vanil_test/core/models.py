@@ -63,8 +63,12 @@ class Cashiers(models.Model):
 class Categories(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     name = models.TextField(unique=True)
+
+
     def __str__(self):
         return self.name
+    
+    
     class Meta:
         managed = True
         db_table = 'categories'
