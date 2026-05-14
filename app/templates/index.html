@@ -72,6 +72,32 @@
     <input type="text" name="cashier_id" placeholder="Cashier ID" required>
     <button type="submit">Войти</button>
 </form>
+
+<div style="text-align: center; margin-top: 1em;">
+    <button type="button" id="btn-register" onclick="registerDevice()">Зарегистрировать устройство</button>
+    <p id="reg-code" style="display:none; font-size: 2em; font-weight: bold; letter-spacing: 0.3em; margin-top: 0.5em;"></p>
+    <p id="reg-hint" style="display:none; font-size: 12px; color: #999;">Код действителен 10 минут</p>
+</div>
+
+<script>
+async function registerDevice() {
+    const params = new URLSearchParams(window.location.search);
+    const androidId = params.get('android_id');
+    if (!androidId) {
+        alert('android_id не найден. Откройте страницу через приложение.');
+        return;
+    }
+    const resp = await fetch(`/api/register-device?android_id=${androidId}`, { method: 'POST' });
+    if (resp.ok) {
+        const data = await resp.json();
+        document.getElementById('reg-code').textContent = data.code;
+        document.getElementById('reg-code').style.display = 'block';
+        document.getElementById('reg-hint').style.display = 'block';
+    } else {
+        alert('Ошибка регистрации');
+    }
+}
+</script>
 {% else %}
 
 <h1 style="text-align: center;">Заказ</h1>

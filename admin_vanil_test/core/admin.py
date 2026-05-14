@@ -611,6 +611,54 @@ class ShopsAdmin(admin.ModelAdmin):
     list_editable = ['shop_group']
     list_display_links = ['id']
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path('register-device/',
+                 self.admin_site.admin_view(self.register_device_view),
+                 name='shops_register_device'),
+        ]
+        return custom + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['register_device_url'] = 'register-device/'
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def register_device_view(self, request: HttpRequest) -> HttpResponse:
+        error = None
+        success = None
+
+        if request.method == 'POST':
+            code = request.POST.get('code', '').strip()
+            shop_id = request.POST.get('shop_id', '').strip()
+
+            import asyncio
+            from app.infrastructure.redis.device_repo import DeviceRepo
+            device_repo = DeviceRepo()
+            android_id = asyncio.run(device_repo.consume_code(code=code))
+
+            if not android_id:
+                error = 'Код не найден или истёк'
+            else:
+                try:
+                    shop = Shops.objects.get(id=shop_id)
+                    shop.android_id = android_id
+                    shop.save(update_fields=['android_id'])
+                    success = f'Устройство успешно привязано к магазину {shop.address}'
+                except Shops.DoesNotExist:
+                    error = 'Магазин не найден'
+
+        shops = Shops.objects.order_by('address').values('id', 'address')
+        ctx = {
+            **self.admin_site.each_context(request),
+            'shops': shops,
+            'error': error,
+            'success': success,
+            'opts': self.model._meta,
+        }
+        return TemplateResponse(request, 'admin/orders/register_device.html', ctx)
+
 @admin.register(ShopsGroups)
 class ShopsGroupsAdmin(admin.ModelAdmin):
     list_display = ['id', 'name']

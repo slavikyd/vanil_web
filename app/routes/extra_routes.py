@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.infrastructure.redis.cart_repo import RedisCartRepo
+from app.infrastructure.redis.device_repo import DeviceRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow
 from app.routes.session_utils import get_or_create_session_id
@@ -103,3 +104,11 @@ async def shop_by_device(
     assert uow.shops is not None
     shop_id = await uow.shops.find_by_android_id(android_id=android_id)
     return JSONResponse({'shop_id': str(shop_id) if shop_id else None})
+
+@router.post('/api/register-device')
+async def register_device(
+    android_id: str,
+):
+    device_repo = DeviceRepo()
+    code = await device_repo.create_code(android_id=android_id)
+    return JSONResponse({'code': code})
