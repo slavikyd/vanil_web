@@ -24,6 +24,9 @@ async def index(
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
     shop_id: uuid.UUID | None = None,
 ):
+    if shop_id:
+        request.session['shop_id'] = str(shop_id)
+
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
         return templates.TemplateResponse(
@@ -32,9 +35,6 @@ async def index(
         )
 
     session_id = get_or_create_session_id(request.session)
-
-    if shop_id:
-        request.session['shop_id'] = str(shop_id)
 
     if not shop_id and request.session.get('shop_id'):
         shop_id = uuid.UUID(request.session['shop_id'])
