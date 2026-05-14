@@ -96,7 +96,7 @@ class Items(models.Model):
 
 class Orders(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    created = models.DateTimeField(default=timezone.now())
+    created = models.DateTimeField(default=timezone.now)
     shop = models.ForeignKey('Shops', models.DO_NOTHING, blank=True, null=True)
     cashier = models.ForeignKey(Cashiers, models.DO_NOTHING, blank=True, null=True)
     address = models.TextField()

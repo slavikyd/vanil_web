@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from datetime import date, datetime
 from io import BytesIO
 from typing import Any
@@ -14,6 +15,7 @@ from fastapi import status
 from openpyxl import Workbook
 
 from .models import *
+from core.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -633,10 +635,22 @@ class ShopsAdmin(admin.ModelAdmin):
             code = request.POST.get('code', '').strip()
             shop_id = request.POST.get('shop_id', '').strip()
 
-            import asyncio
-            from app.infrastructure.redis.device_repo import DeviceRepo
-            device_repo = DeviceRepo()
-            android_id = asyncio.run(device_repo.consume_code(code=code))
+            r = get_redis()
+            key = f'device_reg:{code}'
+            android_id = r.get(key)
+            if not android_id:
+                error = 'Код не найден или истёк'
+            else:
+                android_id = android_id.decode('utf-8') if isinstance(android_id, bytes) else android_id
+                r.delete(key)
+                try:
+                    shop = Shops.objects.get(id=shop_id)
+                    shop.android_id = android_id
+                    shop.save(update_fields=['android_id'])
+                    success = f'Устройство успешно привязано к магазину {shop.address}'
+                except Shops.DoesNotExist:
+                    error = 'Магазин не найден'
+           
 
             if not android_id:
                 error = 'Код не найден или истёк'
