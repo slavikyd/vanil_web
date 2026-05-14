@@ -33,6 +33,12 @@ async def index(
 
     session_id = get_or_create_session_id(request.session)
 
+    if shop_id:
+        request.session['shop_id'] = str(shop_id)
+
+    if not shop_id and request.session.get('shop_id'):
+        shop_id = uuid.UUID(request.session['shop_id'])
+
     ctx = await IndexService.get_index_context(
         uow=uow,
         cart_repo=cart_repo,

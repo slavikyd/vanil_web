@@ -141,7 +141,7 @@ class ShopsGroups(models.Model):
         verbose_name_plural = 'Группы магазинов'
 
 class Shops(models.Model):
-    id = models.TextField(primary_key=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     phone_number = models.TextField()
     address = models.TextField(max_length=255)
     shop_group = models.ForeignKey(ShopsGroups, models.DO_NOTHING, blank=True, null=True, db_column='shop_group')
