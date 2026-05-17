@@ -14,7 +14,8 @@ class ItemsRepo:
             FROM items i
             LEFT JOIN categories c ON c.id = i.category
             WHERE active = TRUE
-            ORDER BY c.name NULLS LAST, i.name ASC
+            ORDER BY c.name NULLS LAST, i.pos NULLS LAST
+
             """
         )
         return [

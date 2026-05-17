@@ -75,10 +75,13 @@ async def logout(
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
 ):
     session_id = request.session.get('session_id')
+    shop_id = request.session.get('shop_id')
     if session_id:
         await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
 
     request.session.clear()
+    if shop_id:
+        request.session['shop_id'] = shop_id
     return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
