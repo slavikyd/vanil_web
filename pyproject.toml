@@ -27,6 +27,7 @@ redis = "^7.1.0"
 pytest = "^9.0.2"
 httpx = "^0.28.1"
 python-json-logger = "^4.0.0"
+prometheus-fastapi-instrumentator = "^7.1.0"
 
 [tool.poetry.group.dev.dependencies]
 yoyo-migrations = "^9.0.0"
