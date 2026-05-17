@@ -16,3 +16,9 @@ class CashiersRepo:
             'SELECT is_admin FROM cashiers WHERE id = $1', cashier_id
         )
         return bool(row and row['is_admin'])
+
+    async def get_full_name(self, *, cashier_id: str) -> str | None:
+        row = await self._conn.fetchrow(
+            'SELECT full_name FROM cashiers WHERE id = $1', cashier_id
+        )
+        return row['full_name'] if row else None

@@ -105,7 +105,9 @@ async function registerDevice() {
 </script>
 {% else %}
 
-<h1 style="text-align: center;">Заказ</h1>
+<h1 style="text-align: center;">Добрый день, {{ cashier_name }}!</h1>
+
+<h2 style="text-align: center;">Заказ</h2>
 
 <div class="page-container">
 <form id="orderForm" action="/place_order" method="post" style="text-align: center; margin-top: 2em;">
