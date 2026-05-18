@@ -5,6 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.metrics import orders_created, orders_failed, cart_items_added, cart_cleared, order_size
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow
@@ -58,7 +59,7 @@ async def add_to_cart(
         quantity=quantity,
     )
     logger.debug('cart item updated', extra={'session_id': session_id, 'item_id': itemid, 'quantity': quantity}) # TODO: possibly remove this debugging log message
-
+    cart_items_added.inc()
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
     comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
@@ -154,9 +155,11 @@ async def place_order(
         )
     except EmptyCartError:
         logger.warning('order attempt with empty cart', extra={'cashier_id': cashier_id})
+        orders_failed.labels(reason='empty_cart').inc()
         return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
     except InvalidOrderDateError:
         logger.exception('order creation failed: impossible date', extra={'cashier_id': cashier_id, 'date': order_for})
+        orders_failed.labels(reason='invalid_date').inc()
         return HTMLResponse('Invalid order date', status_code=status.HTTP_400_BAD_REQUEST)
     except ValueError as e:
         logger.warning('order creation failed: invalid shop', extra={'cashier_id': cashier_id, 'error': str(e)})
@@ -164,11 +167,17 @@ async def place_order(
 
     except Exception as e:
         logger.exception('order creation failed', extra={'cashier_id': cashier_id, 'error': str(e)})
+        orders_failed.labels(reason='unknown').inc()
         return HTMLResponse(
             f'Failed to create order: {e}', status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     logger.info('order placed successfully', extra={'cashier_id': cashier_id, 'order_for': order_for})
+    orders_created.labels(cashier_id=cashier_id, shop_id=str(shop_id)).inc()
+    order_size.observe(len(cart))
+    
+    
     await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
+    
     return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 

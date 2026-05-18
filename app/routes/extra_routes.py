@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.metrics import cart_cleared
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.redis.device_repo import DeviceRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
@@ -78,7 +79,7 @@ async def logout(
     shop_id = request.session.get('shop_id')
     if session_id:
         await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
-
+    cart_cleared.inc()
     request.session.clear()
     if shop_id:
         request.session['shop_id'] = shop_id
