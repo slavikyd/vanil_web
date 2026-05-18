@@ -122,3 +122,7 @@ async def register_device(
     device_repo = DeviceRepo()
     code = await device_repo.create_code(android_id=android_id)
     return JSONResponse({'code': code})
+
+@router.get('/instr', response_class=HTMLResponse)
+async def instructions(request: Request):
+    return templates.TemplateResponse('instr.html', {'request': request})
