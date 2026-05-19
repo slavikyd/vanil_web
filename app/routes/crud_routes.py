@@ -31,6 +31,7 @@ def group_orders_by_day(rows: list[dict]) -> dict[str, list[dict]]:
                 'id': oid,
                 'created': r['created'],
                 'address': r['address'],
+                'cashier_name': r['cashier_name'],
                 'items': [],
             }
             day_bucket.append(order)
@@ -194,9 +195,11 @@ async def orders_view(
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='today')
     grouped = group_orders_by_day(rows)
     today_orders = grouped.get(date.today().isoformat(), [])
+    assert uow.cashiers is not None
+    cashier_name = await uow.cashiers.get_full_name(cashier_id=cashier_id)
     return templates.TemplateResponse(
         'orders.html',
-        {'request': request, 'today_orders': today_orders},
+        {'request': request, 'today_orders': today_orders, 'cashier_name': cashier_name or cashier_id},
     )
 
 
@@ -212,9 +215,11 @@ async def orders_archive_view(
     assert uow.orders is not None
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='past')
     grouped = group_orders_by_day(rows)
+    assert uow.cashiers is not None
+    cashier_name = await uow.cashiers.get_full_name(cashier_id=cashier_id)
     return templates.TemplateResponse(
         'orders_archive.html',
-        {'request': request, 'archive_orders': grouped},
+        {'request': request, 'archive_orders': grouped, 'cashier_name': cashier_name or cashier_id,},
     )
 
 @router.get('/orders/future', response_class=HTMLResponse)
@@ -230,10 +235,11 @@ async def orders_future_view(
 
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='future')
     grouped = group_orders_by_day(rows)
-
+    assert uow.cashiers is not None
+    cashier_name = await uow.cashiers.get_full_name(cashier_id=cashier_id)
     return templates.TemplateResponse(
         'orders_future.html',
-        {'request': request, 'future_orders': grouped},
+        {'request': request, 'future_orders': grouped, 'cashier_name': cashier_name or cashier_id,},
     )
 
 @router.post('/set-order-type')
