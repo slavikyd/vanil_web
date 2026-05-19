@@ -12,6 +12,7 @@ from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.redis import redis
 from app.routes import crud_routes, extra_routes
 from prometheus_fastapi_instrumentator import Instrumentator
+import mimetypes
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,8 @@ SESSION_MAX_AGE_SECONDS = int(os.getenv('SESSION_MAX_AGE_SECONDS'))
 
 setup_logging()
 app = FastAPI()
+mimetypes.add_type('application/vnd.android.package-archive', '.apk')
+
 app.mount('/static', StaticFiles(directory='app/static'), name='static')
 
 app.add_middleware(
