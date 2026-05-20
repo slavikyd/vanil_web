@@ -58,6 +58,8 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
         grouped.setdefault(o.order_for, []).append(o)
 
     today = timezone.localdate()
+    if today not in grouped:
+        grouped[today] = []
     days_sorted = sorted(grouped.keys(), reverse=True)[offset_days:]
     if max_days is not None:
         days_sorted = days_sorted[:max_days]
