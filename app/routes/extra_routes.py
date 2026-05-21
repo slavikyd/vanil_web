@@ -126,3 +126,7 @@ async def register_device(
 @router.get('/instr', response_class=HTMLResponse)
 async def instructions(request: Request):
     return templates.TemplateResponse('instr.html', {'request': request})
+
+@router.get('/admin-instruction', response_class=HTMLResponse)
+async def instructions(request: Request):
+    return templates.TemplateResponse('admin_instr.html', {'request': request})
