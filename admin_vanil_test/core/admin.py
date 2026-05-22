@@ -229,7 +229,7 @@ class OrdersAdmin(admin.ModelAdmin):
 
         totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
         totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
-        item_comments: dict[str, str] = {}
+        item_comments: dict[str, list[str]] = {}
         order_comments: list[str] = []
 
         orders = (
@@ -258,7 +258,7 @@ class OrdersAdmin(admin.ModelAdmin):
                 else:
                     totals_plain[name] = totals_plain.get(name, 0) + qty
                 if oi.comment:
-                    item_comments[name] = oi.comment
+                    item_comments.setdefault(name, []).append(oi.comment)
 
         tbl_groups: dict[int, list] = {}
         for item in all_items:
@@ -273,7 +273,7 @@ class OrdersAdmin(admin.ModelAdmin):
                     'name': i['name'],
                     'plain': totals_plain.get(i['name'], 0),
                     'special': totals_special.get(i['name'], 0),
-                    'comment': item_comments.get(i['name'], ''),
+                    'comment': '; '.join(item_comments.get(i['name'], [])),
                 }
                 for i in items
             ])
@@ -504,7 +504,7 @@ class OrdersAdmin(admin.ModelAdmin):
 
         totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
         totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
-        item_comments: dict[str, str] = {}
+        item_comments: dict[str, list[str]] = {}
         order_comments: list[str] = []
 
         orders = (
@@ -533,7 +533,7 @@ class OrdersAdmin(admin.ModelAdmin):
                 else:
                     totals_plain[name] = totals_plain.get(name, 0) + qty
                 if oi.comment:
-                    item_comments[name] = oi.comment
+                    item_comments.setdefault(name, []).append(oi.comment)
 
         # Group items by tbl
         tbl_groups: dict[int, list] = {}
