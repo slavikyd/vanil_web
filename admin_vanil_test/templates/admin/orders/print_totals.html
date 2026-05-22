@@ -35,7 +35,26 @@
             text-align: right;
         }
         @media print {
-            @page { margin: 1cm; }
+            @page { 
+                margin: 0.3cm;
+            }
+            body {
+                font-size: 9px;
+                margin: 0;
+                padding: 0;
+            }
+            .grid {
+                gap: 8px;
+            }
+            .col {
+                gap: 8px;
+            }
+            table {
+                page-break-inside: avoid;
+            }
+        }
+        .col {
+            page-break-inside: avoid;
         }
     </style>
 </head>
