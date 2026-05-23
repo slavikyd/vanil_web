@@ -242,8 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('itemid', itemId);
         formData.append('comment', text);
-        const tgId = getTgId();
-        if (tgId) formData.append('tg_id', tgId);
+        // const tgId = getTgId();
+        // if (tgId) formData.append('tg_id', tgId);
         const resp = await fetch('/set-cart-comment', { method: 'POST', body: formData });
         if (resp.ok) {
             const json = await resp.json();
