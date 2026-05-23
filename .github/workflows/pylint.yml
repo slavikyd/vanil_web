@@ -59,5 +59,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
+          SESSION_SECRET_KEY: test-secret
+          SESSION_MAX_AGE_SECONDS: 3600
         run: |
           pytest --cov=app --cov-report=term
