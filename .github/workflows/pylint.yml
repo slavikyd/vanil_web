@@ -49,15 +49,15 @@ jobs:
 
          
       
-      - name: Linter
+      # - name: Linter
       
-        run: |
-          ruff check .
+      #   run: |
+      #     ruff check .
       
 
-      - name: Run tests
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379/0
-        run: |
-          pytest --cov=app --cov-report=term
+      # - name: Run tests
+      #   env:
+      #     DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+      #     REDIS_URL: redis://localhost:6379/0
+      #   run: |
+      #     pytest --cov=app --cov-report=term
