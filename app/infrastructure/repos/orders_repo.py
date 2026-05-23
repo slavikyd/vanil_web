@@ -65,7 +65,10 @@ class OrdersRepo:
         quantities = list(cart.values())
         notes = [(comments.get(item_id) or '').strip() or None for item_id in cart]
         types = [order_types.get(item_id) or 'Обычный' for item_id in cart]
-        # logging.getLogger(__name__).warning(f'DEBUG types: {types}')
+        logging.getLogger(__name__).warning(f'DEBUG types: {types}')
+        logging.getLogger(__name__).warning(f'DEBUG notes: {notes}')
+        logging.getLogger(__name__).warning(f'DEBUG comments: {comments}')
+        logging.getLogger(__name__).warning(f'DEBUG cart keys: {list(cart.keys())}')
 
         await self._conn.execute(
             """
