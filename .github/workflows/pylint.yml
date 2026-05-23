@@ -47,14 +47,6 @@ jobs:
           set -euo pipefail
           poetry run yoyo apply --batch --database "${DB_URL_MIGRATIONS:?DB_URL_MIGRATIONS is missing}" migrations
 
-         
-      
-      - name: Linter
-      
-        run: |
-          ruff check .
-      
-
       - name: Run tests
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
@@ -63,3 +55,11 @@ jobs:
           SESSION_MAX_AGE_SECONDS: 3600
         run: |
           pytest --cov=app --cov-report=term
+   
+      
+      - name: Linter
+      
+        run: |
+          ruff check .
+      
+
