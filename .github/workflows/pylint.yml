@@ -49,10 +49,10 @@ jobs:
 
          
       
-      # - name: Linter
+      - name: Linter
       
-      #   run: |
-      #     ruff check .
+        run: |
+          ruff check .
       
 
       - name: Run tests
