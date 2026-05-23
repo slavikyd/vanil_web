@@ -16,12 +16,19 @@ async def test_place_order_success(client, mock_db_pool, mock_redis):
 
     conn.fetchrow.side_effect = fetchrow_side_effect
 
-    mock_redis.hgetall.return_value = {str(ITEM_ID): '2'}
+    async def hgetall_side_effect(key: str):
+        if 'order_types' in key:
+            return {}
+        if 'comments' in key:
+            return {}
+        return {str(ITEM_ID): '2'}
+
+    mock_redis.hgetall.side_effect = hgetall_side_effect
     mock_redis.delete.return_value = None
 
     resp_login = await client.post(
         '/login',
-        data={'cashierid': ADMIN_ID, 'cashier_id': ADMIN_ID},
+        data={'cashier_id': ADMIN_ID},
         follow_redirects=False,
     )
     assert resp_login.status_code != status.HTTP_422_UNPROCESSABLE_ENTITY, resp_login.text
@@ -30,10 +37,8 @@ async def test_place_order_success(client, mock_db_pool, mock_redis):
     response = await client.post(
         '/place_order',
         data={
-            'orderfor': '2030-01-01',
             'order_for': '2030-01-01',
-            'tgid': SHOP_ID,
-            'tg_id': SHOP_ID,
+            'shop_id': str(SHOP_ID),
         },
         follow_redirects=False,
     )

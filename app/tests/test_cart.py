@@ -4,7 +4,7 @@ Test cart operations with mocked DB and Redis.
 
 from fastapi import status
 
-from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID
+from app.tests.fixtures.constants import ADMIN_ID, ITEM_ID, SHOP_ID
 
 
 async def test_add_item_to_cart(client, mock_db_pool, mock_redis):
@@ -75,7 +75,6 @@ async def test_remove_from_cart(client, mock_redis):
     response = await client.post(
         '/remove-from-cart',
         data={
-            'itemid': str(ITEM_ID),
             'item_id': str(ITEM_ID),
         },
         follow_redirects=False,
@@ -109,10 +108,8 @@ async def test_place_order_empty_cart(client, mock_db_pool, mock_redis):
     response = await client.post(
         '/place_order',
         data={
-            'orderfor': '2030-01-01',
             'order_for': '2030-01-01',
-            'tgid': 'shop-test',
-            'tg_id': 'shop-test',
+            'shop_id': str(SHOP_ID),
         },
         follow_redirects=False,
     )
