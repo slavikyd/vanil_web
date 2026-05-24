@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from typing import Any
 
@@ -60,9 +60,18 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
     today = timezone.localdate()
     if today not in grouped:
         grouped[today] = []
-    days_sorted = sorted(grouped.keys(), reverse=True)[offset_days:]
-    if max_days is not None:
-        days_sorted = days_sorted[:max_days]
+    
+    today_date = timezone.localdate()
+    cutoff = today_date - timedelta(days=offset_days) if offset_days else None
+
+    days_sorted = sorted(grouped.keys(), reverse=True)
+    if cutoff is not None and max_days is None:
+        # archive: everything older than cutoff
+        days_sorted = [d for d in days_sorted if d < cutoff]
+    elif max_days is not None:
+
+        live_cutoff = today_date - timedelta(days=max_days)
+        days_sorted = [d for d in days_sorted if d >= live_cutoff]
 
     days_payload = []
     for d in days_sorted:

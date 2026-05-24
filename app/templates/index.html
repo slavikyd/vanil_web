@@ -205,7 +205,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const orderList = document.querySelector('.items-list');
     let commentTimers = {};
 
-    // window.getTgId = () => document.querySelector('input[name="tg_id"]')?.value || null;
+    const orderForInput = document.getElementById('order_for');
+    const dateError = document.getElementById('dateError');
+    const orderForm = document.getElementById('orderForm');
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const maxDate = new Date(today);
+    maxDate.setDate(today.getDate() + 14);
+
+    orderForInput.min = today.toISOString().split('T')[0];
+    orderForInput.max = maxDate.toISOString().split('T')[0];
+
+    orderForm.addEventListener('submit', (e) => {
+        const selected = new Date(orderForInput.value);
+        selected.setHours(0, 0, 0, 0);
+        if (selected < today) {
+            e.preventDefault();
+            dateError.textContent = 'Нельзя создать заявку на прошедшую дату';
+            return;
+        }
+        if (selected > maxDate) {
+            e.preventDefault();
+            dateError.textContent = 'Нельзя создать заявку дальше чем на 2 недели вперёд';
+            return;
+        }
+        dateError.textContent = '';
+    });
 
     function applyCommentInputs(comments) {
         if (!comments) return;
@@ -221,29 +247,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('itemid', itemId);
         formData.append('quantity', qty);
-
-        // const tgId = getTgId();
-        // if (tgId) formData.append('tg_id', tgId);
-
         const resp = await fetch('/add-to-cart', { method: 'POST', body: formData });
         if (resp.ok) {
             const json = await resp.json();
             renderOrder(json.cart, json.items_data, json.comments);
-
             const input = document.getElementById(`quantity-${itemId}`);
             if (input) input.value = qty;
             applyCommentInputs(json.comments);
         }
     };
 
-    
-    
     async function sendComment(itemId, text) {
         const formData = new FormData();
         formData.append('itemid', itemId);
         formData.append('comment', text);
-        // const tgId = getTgId();
-        // if (tgId) formData.append('tg_id', tgId);
         const resp = await fetch('/set-cart-comment', { method: 'POST', body: formData });
         if (resp.ok) {
             const json = await resp.json();
@@ -252,12 +269,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function sendOrderType(itemId, isSpecial){
+    async function sendOrderType(itemId, isSpecial) {
         const formData = new FormData();
         formData.append('item_id', itemId);
         formData.append('order_type', isSpecial ? 'Спец. заказ' : 'Обычный');
-        // const tgId = getTgId();
-        // if (tgId) formData.append('tg_id', tgId);
         await fetch('/set-order-type', { method: 'POST', body: formData });
     }
 
@@ -276,7 +291,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.className = 'cart-item card';
                 li.dataset.itemId = id;
-
                 li.style.display = 'flex';
                 li.style.alignItems = 'center';
                 li.style.justifyContent = 'space-between';
@@ -294,7 +308,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         <button type="button" class="cart-delete" style="background:#dc3545;color:#fff;border:none;padding:4px 10px;border-radius:4px;">Удалить</button>
                     </div>
                 `;
-
                 orderList.appendChild(li);
             }
         }
@@ -331,16 +344,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const cb = e.target.closest('.item-order-type');
         if (!cb) return;
         sendOrderType(cb.dataset.itemId, cb.checked);
-    })
+    });
 
     orderList.addEventListener('click', (e) => {
         const li = e.target.closest('.cart-item');
         if (!li) return;
-
         const id = li.dataset.itemId;
         const input = li.querySelector('input');
         const qty = parseInt(input.value);
-
         if (e.target.classList.contains('cart-minus')) {
             sendUpdate(id, Math.max(0, qty - 1));
         } else if (e.target.classList.contains('cart-plus')) {
@@ -350,24 +361,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-
-
     selectors.forEach(s => {
         const input = s.querySelector('input');
         const id = input.dataset.itemId;
-
         s.querySelector('.quantity-plus').onclick = () => {
             const newQty = parseInt(input.value) + 1;
             input.value = newQty;
             sendUpdate(id, newQty);
         };
-
         s.querySelector('.quantity-minus').onclick = () => {
             const newQty = Math.max(0, parseInt(input.value) - 1);
             input.value = newQty;
             sendUpdate(id, newQty);
         };
-
         input.onchange = () => sendUpdate(id, parseInt(input.value) || 0);
     });
 
