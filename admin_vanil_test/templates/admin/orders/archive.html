@@ -36,7 +36,6 @@
   <h1>{{ page_heading }}</h1>
   <div class="lo-actions">
     <button id="btn-refresh" type="button" class="button">Обновить</button>
-    <a href="{{ normal_orders_url }}">Обычная страница</a>
     {% if show_live_link %}
       <a href="{{ live_url }}">Живые заявки</a>
     {% endif %}
@@ -249,7 +248,7 @@ function renderShopSummary(dayIso, shopData, allItems) {
   for (let i = 0; i < 4; i++) columns[i].sort((a, b) => a.pos - b.pos);
   columns[3].push(...unassigned);
 
-  const { totals_plain } = buildShopTotals(shopData, allItems);
+  const { totals_special, totals_plain } = buildShopTotals(shopData, allItems);
 
   const grid = el('div', { class: 'totals-grid' });
   for (let i = 0; i < 4; i++) {
