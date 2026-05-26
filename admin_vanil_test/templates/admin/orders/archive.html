@@ -36,11 +36,9 @@
   <h1>{{ page_heading }}</h1>
   <div class="lo-actions">
     <button id="btn-refresh" type="button" class="button">Обновить</button>
-    <a href="{{ normal_orders_url }}">Обычная страница</a>
     {% if show_live_link %}
       <a href="{{ live_url }}">Живые заявки</a>
     {% endif %}
-    <a href="{{ home_url }}">На главную</a>
   </div>
 </div>
 
@@ -111,6 +109,11 @@
     return e;
   }
 
+  function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? v[2] : null;
+  }
+
   function renderTotalsGrid(dayIso, totals) {
     const total = totals.length;
 
@@ -179,9 +182,7 @@
           const stock = (parsed === null) ? 0 : parsed;
           const total = ordered_shop + ordered_special + ordered_priority;
           const missing = Math.max(0, total - stock);
-          const remainder = total - stock;
           missingTd.textContent = String(missing);
-          remainderTd.textContent = String(remainder);
         }
 
         recompute();
@@ -214,29 +215,183 @@
     return grid;
   }
 
-  function renderShops(day, dayIso) {
-    const wrap = el('div', { class: 'shops' });
-    for (const s of (day.shops || [])) {
-      const shopDetails = el('details', { class: 'shop' });
-      const cnt = (s.orders || []).length;
-      const summary = el('summary', { style: 'display:flex; align-items:center; justify-content:space-between;' });
-      summary.appendChild(document.createTextNode(`${s.shop} (${cnt})`));
-      summary.appendChild(el('a', {
-        href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${s.orders[0]?.shop_id || ''}`,
-        text: 'Экспорт в Excel',
-        style: 'font-size:12px; margin-left:12px;',
-        onclick: 'event.stopPropagation()',
-      }));
-      shopDetails.appendChild(summary);
+  function buildShopTotals(shopData, allItems) {
+    const totals_special = {};
+    const totals_plain = {};
+    for (const item of allItems) totals_special[item.name] = totals_plain[item.name] = 0;
 
-      const body = el('div');
-      for (const o of (s.orders || [])) {
-        const order = el('div', { class: 'order' });
-        const head = el('div', { class: 'order-head' }, [
+    for (const o of (shopData ? shopData.orders.filter(o => !o.disabled && !o.completed) : [])) {
+      for (const it of (o.items || [])) {
+        if (it.order_type === 'Спец. заказ') {
+          totals_special[it.name] = (totals_special[it.name] || 0) + (it.quantity || 0);
+        } else {
+          totals_plain[it.name] = (totals_plain[it.name] || 0) + (it.quantity || 0);
+        }
+      }
+    }
+    return { totals_special, totals_plain };
+  }
+
+function renderShopSummary(dayIso, shopData, allItems) {
+  // Group items by tbl same as main grid
+  const columns = [[], [], [], []];
+  const unassigned = [];
+  for (const item of allItems) {
+    if (item.tbl !== null && item.tbl !== undefined) {
+      const col = columns[item.tbl];
+      if (col) col.push(item);
+    } else {
+      unassigned.push(item);
+    }
+  }
+  for (let i = 0; i < 4; i++) columns[i].sort((a, b) => a.pos - b.pos);
+  columns[3].push(...unassigned);
+
+  const { totals_special, totals_plain } = buildShopTotals(shopData, allItems);
+
+  const grid = el('div', { class: 'totals-grid' });
+  for (let i = 0; i < 4; i++) {
+    const chunk = columns[i];
+    if (!chunk.length) continue;
+
+    const table = el('table', { class: 'lo-table' });
+    const thead = el('thead');
+    const trh = el('tr');
+    ['Позиция', 'Обычный', 'Спец. заказ'].forEach(h => trh.appendChild(el('th', { text: h })));
+    thead.appendChild(trh);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    for (const item of chunk) {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: item.name }));
+      tr.appendChild(el('td', { class: 'num', text: String(totals_plain[item.name] || 0) }));
+      tr.appendChild(el('td', { class: 'num', text: String(totals_special[item.name] || 0) }));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    grid.appendChild(table);
+  }
+  return grid;
+}
+
+function renderShops(day, dayIso, allItems) {
+  // Build lookup: shop_id -> shop data (orders etc)
+  const shopDataMap = {};
+  for (const s of (day.shops || [])) {
+    shopDataMap[s.shop_id] = s;
+  }
+
+  const wrap = el('div');
+
+  // Tab strip
+  const tabStrip = el('div', { style: 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;' });
+  const tabContents = el('div');
+
+  const allShops = (window._allShops || []);
+
+  allShops.forEach((shop, idx) => {
+    const hasOrders = !!shopDataMap[shop.id];
+    const tabBtn = el('button', {
+      type: 'button',
+      class: 'mode-btn' + (idx === 0 ? ' active' : ''),
+      text: shop.address,
+      style: hasOrders ? '' : 'opacity:0.45;',
+      'data-shop-id': shop.id,
+    });
+
+    const pane = el('div', { style: idx === 0 ? '' : 'display:none;' });
+    const shopData = shopDataMap[shop.id] || null;
+
+    // Summary table
+    pane.appendChild(renderShopSummary(dayIso, shopData, allItems));
+
+    // Export link
+    pane.appendChild(el('a', {
+      href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
+      text: 'Экспорт в Excel',
+      style: 'display:inline-block; margin: 8px 0 12px; font-size:12px;',
+    }));
+
+    // Orders list
+    if (!shopData || !shopData.orders.length) {
+      pane.appendChild(el('div', { text: 'Нет заявок', style: 'color:var(--body-quiet-color); margin-top:8px;' }));
+    } else {
+      for (const o of shopData.orders) {
+        const order = el('div', { class: 'order', style: o.disabled ? 'opacity:0.45;' : '', id: `order-${o.id}` });
+        const disableCb = el('input', { type: 'checkbox', title: 'Не учитывать в сумме' });
+        disableCb.checked = o.disabled;
+
+        const completeBtn = el('button', {
+          type: 'button',
+          class: 'mode-btn',
+          text: o.completed ? '✓ Выполнен' : 'Выполнить',
+          style: `font-size:12px; padding:4px 10px;${o.completed ? ' background:var(--primary); color:#fff; border-color:var(--primary);' : ''}`,
+        });
+
+        const deleteBtn = el('button', {
+          type: 'button',
+          class: 'mode-btn',
+          text: 'Удалить',
+          style: 'font-size:12px; padding:4px 10px; color:#dc3545; border-color:#dc3545;',
+        });https://claude.ai/chat/c665e1f3-d29c-4a97-9293-0d831c91eb08
+
+        disableCb.addEventListener('change', async () => {
+          const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-disabled/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            o.disabled = data.disabled;
+            order.style.opacity = data.disabled ? '0.45' : '';
+            // recompute summary in place
+            const newGrid = renderShopSummary(dayIso, shopData, allItems);
+            const oldGrid = pane.querySelector('.totals-grid');
+            if (oldGrid) pane.replaceChild(newGrid, oldGrid);
+          }
+        });
+
+        completeBtn.addEventListener('click', async () => {
+          const resp = await fetch(`/admin/core/orders/order/${o.id}/toggle-completed/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            o.completed = data.completed;
+            completeBtn.textContent = data.completed ? '✓ Выполнен' : 'Выполнить';
+            completeBtn.style.background = data.completed ? 'var(--primary)' : '';
+            completeBtn.style.color = data.completed ? '#fff' : '';
+            completeBtn.style.borderColor = data.completed ? 'var(--primary)' : '';
+          }
+        });
+
+        deleteBtn.addEventListener('click', async () => {
+          if (!confirm('Удалить заказ?')) return;
+          const resp = await fetch(`/admin/core/orders/order/${o.id}/delete/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+          });
+          if (resp.ok) {
+            order.remove();
+            shopData.orders = shopData.orders.filter(ord => ord.id !== o.id);
+            const newGrid = renderShopSummary(dayIso, shopData, allItems);
+            if (oldGrid) pane.replaceChild(newGrid, oldGrid);
+          }
+        });
+
+        order.appendChild(el('div', { class: 'order-head' }, [
           el('div', { text: `${o.created_hhmm} | ${o.cashier_name}` }),
-          el('div', { class: 'muted', text: String(o.id) })
-        ]);
-        order.appendChild(head);
+          el('div', { style: 'display:flex; align-items:center; gap:8px;' }, [
+            el('label', { style: 'display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;' }, [
+              disableCb,
+              document.createTextNode('Не учитывать'),
+            ]),
+            completeBtn,
+            deleteBtn,
+          ]),
+        ]));
 
         const ul = el('ul', { class: 'items' });
         for (const it of (o.items || [])) {
@@ -246,14 +401,25 @@
           ul.appendChild(li);
         }
         order.appendChild(ul);
-        body.appendChild(order);
+        pane.appendChild(order);
       }
-
-      shopDetails.appendChild(body);
-      wrap.appendChild(shopDetails);
     }
-    return wrap;
-  }
+
+    tabBtn.addEventListener('click', () => {
+      tabStrip.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      tabBtn.classList.add('active');
+      tabContents.querySelectorAll(':scope > div').forEach(p => p.style.display = 'none');
+      pane.style.display = '';
+    });
+
+    tabStrip.appendChild(tabBtn);
+    tabContents.appendChild(pane);
+  });
+
+  wrap.appendChild(tabStrip);
+  wrap.appendChild(tabContents);
+  return wrap;
+}
 
   function renderDays(payload) {
     clearRoot();
@@ -265,7 +431,7 @@
 
     for (const day of days) {
       const dayIso = day.date;
-      const details = el('details', { class: 'day' });
+      const details = el('details', { class: 'day', 'data-day': dayIso });
       if (day.is_today) details.open = true;
 
       const dateLabel = fmtDateRu(dayIso) + (day.is_today ? ' (сегодня)' : '');
@@ -292,8 +458,8 @@
       const totalsWrap = el('div', { id: totalsId });
       totalsWrap.appendChild(renderTotalsGrid(dayIso, day.totals || []));
       const shopsWrap = el('div', { id: shopsId, style: 'display:none;' });
-      shopsWrap.appendChild(renderShops(day, dayIso));
-
+      shopsWrap.appendChild(renderShops(day, dayIso, day.totals || []));
+  
       function setMode(mode) {
         if (mode === 'totals') {
           btnTotals.classList.add('active');
@@ -318,19 +484,40 @@
   }
 
   async function refresh() {
+    const activeDay = document.querySelector('.day[open]')?.dataset?.day;
+    const activeMode = document.querySelector('.day[open] .mode-btn.active')?.textContent;
+    const activeShop = document.querySelector('.day[open] .mode-btn.active[data-shop-id]')?.dataset?.shopId;
+
     statusEl.textContent = 'Обновление...';
     try {
       const resp = await fetch(dataUrl, { cache: 'no-store' });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const payload = await resp.json();
+      window._allShops = payload.all_shops || [];
       renderDays(payload);
       statusEl.textContent = `Обновлено: ${nowTimeRu()}`;
+
+      if (activeMode === 'По магазинам') {
+        const dayEl = activeDay
+          ? [...document.querySelectorAll('.day')].find(d => d.dataset.day === activeDay)
+          : document.querySelector('.day[open]');
+        if (dayEl) {
+          const shopsBtn = [...dayEl.querySelectorAll('.mode-btn')].find(b => b.textContent === 'По магазинам');
+          if (shopsBtn) shopsBtn.click();
+          if (activeShop) {
+            const shopBtn = [...dayEl.querySelectorAll('.mode-btn[data-shop-id]')].find(b => b.dataset.shopId === activeShop);
+            if (shopBtn) shopBtn.click();
+          }
+        }
+      }
     } catch (e) {
+      console.error(e);
       statusEl.textContent = 'Ошибка обновления. Нажмите «Обновить» чтобы повторить.';
     }
   }
 
   btn.addEventListener('click', refresh);
+  refresh();
 })();
 </script>
 {% endblock %}

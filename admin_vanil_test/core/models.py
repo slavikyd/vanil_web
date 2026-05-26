@@ -8,6 +8,7 @@
 import uuid
 
 from django.db import models
+from django.utils import timezone
 
 
 class YoyoLog(models.Model):
@@ -46,8 +47,8 @@ class YoyoVersion(models.Model):
 
 class Cashiers(models.Model):
     id = models.TextField(primary_key=True, default=uuid.uuid4)
-    full_name = models.TextField(blank=True, null=True)
-    is_admin = models.BooleanField(blank=True, null=True)
+    full_name = models.TextField(max_length=100)
+    is_admin = models.BooleanField(default=False)
 
     def __str__(self):
         return self.full_name
@@ -55,21 +56,29 @@ class Cashiers(models.Model):
     class Meta:
         managed = True
         db_table = 'cashiers'
+        verbose_name = 'Кассир'
+        verbose_name_plural = 'Кассиры'
 
 
 class Categories(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     name = models.TextField(unique=True)
+
+
     def __str__(self):
         return self.name
+    
+    
     class Meta:
         managed = True
         db_table = 'categories'
+        verbose_name = 'Категория'
+        verbose_name_plural = 'Категории'
 
 
 class Items(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    name = models.TextField(blank=True, null=True)
+    name = models.TextField(max_length=100)
     active = models.BooleanField()
     category = models.ForeignKey(Categories, models.DO_NOTHING, db_column='category', blank=True, null=True)
     tbl = models.IntegerField(null=True, blank=True)
@@ -81,20 +90,26 @@ class Items(models.Model):
     class Meta:
         managed = True
         db_table = 'items'
+        verbose_name = 'Позиция'
+        verbose_name_plural = 'Позиции'
 
 
 class Orders(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    created = models.DateTimeField(blank=True, null=True)
+    created = models.DateTimeField(default=timezone.now)
     shop = models.ForeignKey('Shops', models.DO_NOTHING, blank=True, null=True)
     cashier = models.ForeignKey(Cashiers, models.DO_NOTHING, blank=True, null=True)
-    address = models.TextField(blank=True, null=True)
+    address = models.TextField()
     order_for = models.DateField()
     comment = models.TextField(null=True, blank=True, max_length=255)
+    disabled = models.BooleanField(default=False)
+    completed = models.BooleanField(default=False)
 
     class Meta:
         managed = True
         db_table = 'orders'
+        verbose_name = 'Заказ'
+        verbose_name_plural = 'Заказы'
 
 
 class OrdersItems(models.Model):
@@ -109,10 +124,12 @@ class OrdersItems(models.Model):
     class Meta:
         managed = True
         db_table = 'orders_items'
+        verbose_name = 'Товар к заказу'
+        verbose_name_plural = 'Товары к заказам'
 
 class ShopsGroups(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    name = models.TextField(null=True, blank=True)
+    name = models.TextField(max_length=100)
 
     def __str__(self):
         return self.name or str(self.id)
@@ -120,19 +137,25 @@ class ShopsGroups(models.Model):
     class Meta:
         managed = True
         db_table = 'shops_groups'
+        verbose_name = 'Группа магазинов'
+        verbose_name_plural = 'Группы магазинов'
 
 class Shops(models.Model):
-    id = models.TextField(primary_key=True)
-    phone_number = models.TextField(blank=True, null=True)
-    address = models.TextField(blank=True, null=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    phone_number = models.TextField()
+    address = models.TextField(max_length=255)
     shop_group = models.ForeignKey(ShopsGroups, models.DO_NOTHING, blank=True, null=True, db_column='shop_group')
     android_id = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return self.address
+    
+
     class Meta:
         managed = True
         db_table = 'shops'
+        verbose_name = 'Магазин'
+        verbose_name_plural = 'Магазины'
 
 
 class ShopsOrders(models.Model):
@@ -145,6 +168,7 @@ class ShopsOrders(models.Model):
         db_table = 'shops_orders'
 
 
+
 class YoyoLock(models.Model):
     locked = models.IntegerField(primary_key=True)
     ctime = models.DateTimeField(blank=True, null=True)
@@ -153,3 +177,4 @@ class YoyoLock(models.Model):
     class Meta:
         managed = False
         db_table = 'yoyo_lock'
+

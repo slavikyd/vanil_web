@@ -1,22 +1,21 @@
-from datetime import date, datetime
+import logging
+import asyncio
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from typing import Any
 
 from django.contrib import admin
 from django.db.models import Prefetch
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
-from django.urls import path, re_path
+from django.urls import path
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from fastapi import status
 from openpyxl import Workbook
 
 from .models import *
-
-from itertools import groupby
-from operator import itemgetter
-import logging
+from core.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +38,9 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
     )
     all_items = [i for i in all_items if i["name"]]
 
+    all_shops = list(Shops.objects.order_by('address').values('id', 'address'))
+    all_shops = [{'id': str(s['id']), 'address': s['address']} for s in all_shops]
+
     order_items_prefetch = (
         OrdersItems.objects
         .select_related("item")
@@ -56,9 +58,20 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
         grouped.setdefault(o.order_for, []).append(o)
 
     today = timezone.localdate()
-    days_sorted = sorted(grouped.keys(), reverse=True)[offset_days:]
-    if max_days is not None:
-        days_sorted = days_sorted[:max_days]
+    if today not in grouped:
+        grouped[today] = []
+    
+    today_date = timezone.localdate()
+    cutoff = today_date - timedelta(days=offset_days) if offset_days else None
+
+    days_sorted = sorted(grouped.keys(), reverse=True)
+    if cutoff is not None and max_days is None:
+        # archive: everything older than cutoff
+        days_sorted = [d for d in days_sorted if d < cutoff]
+    elif max_days is not None:
+
+        live_cutoff = today_date - timedelta(days=max_days)
+        days_sorted = [d for d in days_sorted if d >= live_cutoff]
 
     days_payload = []
     for d in days_sorted:
@@ -74,8 +87,8 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
         shops_map: dict[str, list] = {}
 
         for o in day_orders:
-            shop_key = o.address or getattr(o, "shop_id", None) or "Unknown shop"
-            shops_map.setdefault(shop_key, []).append(o)
+            shop_id_key = str(getattr(o, 'shop_id', None) or o.address or 'unknown')
+            shops_map.setdefault(shop_id_key, []).append(o)
 
             is_priority = (
                 getattr(getattr(o, "shop", None), "shop_group", None) is not None
@@ -101,6 +114,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             for i in all_items
         ]
 
+        shop_lookup = {str(s['id']): s['address'] for s in all_shops}
         shops_payload = []
         for shop_key in sorted(shops_map.keys()):
             shop_orders = sorted(
@@ -111,7 +125,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             orders_payload = []
             for o in shop_orders:
                 items_payload = [
-                    {"name": oi.item.name, "quantity": int(oi.quantity or 0)}
+                    {"name": oi.item.name, "quantity": int(oi.quantity or 0), "order_type": getattr(oi, "order_type", "Обычный")}
                     for oi in o.ordersitems_set.all()
                     if getattr(oi.item, "name", None)
                 ]
@@ -123,8 +137,11 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
                     "cashier_name": getattr(o.cashier, "full_name", "") if o.cashier_id else "",
                     "shop_id": getattr(o, "shop_id", None),
                     "items": items_payload,
+                    'disabled': o.disabled,
+                    'completed': o.completed,
                 })
-            shops_payload.append({"shop": shop_key, "orders": orders_payload})
+            
+            shops_payload.append({"shop_id": shop_key, "shop": shop_lookup.get(shop_key, shop_key), "orders": orders_payload})
 
         days_payload.append({
             "date": d.isoformat(),
@@ -136,6 +153,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
 
     return {
         "generated_at": timezone.now().isoformat(),
+        'all_shops': all_shops,
         "days": days_payload,
     }
 
@@ -144,6 +162,138 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
 @admin.register(Orders)
 class OrdersAdmin(admin.ModelAdmin):
     change_list_template = "admin/orders/live.html"
+
+    def print_totals_view(self, request: HttpRequest) -> HttpResponse:
+        order_for = parse_date(request.GET.get("order_for") or "")
+        if not order_for:
+            return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=400)
+
+        all_items = list(
+            Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')
+        )
+        all_items = [i for i in all_items if i['name']]
+
+        totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_priority: dict[str, int] = {i['name']: 0 for i in all_items}
+
+        for oi in (OrdersItems.objects
+                .select_related("item", 'order__shop__shop_group')
+                .filter(order__order_for=order_for)):
+            name = getattr(oi.item, "name", None)
+            if not name:
+                continue
+            qty = int(oi.quantity or 0)
+            order_type = getattr(oi, 'order_type', 'Обычный')
+            is_priority = (
+                getattr(getattr(getattr(oi, 'order', None), 'shop', None), 'shop_group', None) is not None
+                and getattr(oi.order.shop.shop_group, 'name', None) == PRIORITY_GROUP_NAME
+            )
+            if is_priority:
+                totals_priority[name] = totals_priority.get(name, 0) + qty
+            elif order_type == 'Спец. заказ':
+                totals_special[name] = totals_special.get(name, 0) + qty
+            else:
+                totals_plain[name] = totals_plain.get(name, 0) + qty
+
+        tbl_groups: dict[int, list] = {}
+        for item in all_items:
+            tbl = item['tbl'] if item['tbl'] is not None else 3
+            tbl_groups.setdefault(tbl, []).append(item)
+
+        tables = []
+        for tbl_index in range(4):
+            items = tbl_groups.get(tbl_index, [])
+            tables.append([
+                {
+                    'name': i['name'],
+                    'plain': totals_plain.get(i['name'], 0),
+                    'special': totals_special.get(i['name'], 0),
+                    'priority': totals_priority.get(i['name'], 0),
+                }
+                for i in items
+            ])
+
+        ctx = {
+            'order_for': order_for,
+            'tables': tables,
+        }
+        return TemplateResponse(request, "admin/orders/print_totals.html", ctx)
+
+    def print_shop_view(self, request: HttpRequest) -> HttpResponse:
+        order_for = parse_date(request.GET.get("order_for") or "")
+        shop_id = request.GET.get("shop_id") or ""
+        if not order_for or not shop_id:
+            return HttpResponse("Missing ?order_for=YYYY-MM-DD&shop_id=...", status=400)
+
+        try:
+            shop = Shops.objects.get(id=shop_id)
+        except Shops.DoesNotExist:
+            return HttpResponse("Shop not found", status=404)
+
+        all_items = list(
+            Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')
+        )
+        all_items = [i for i in all_items if i['name']]
+
+        totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
+        totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
+        item_comments: dict[str, list[str]] = {}
+        order_comments: list[str] = []
+
+        orders = (
+            Orders.objects
+            .filter(shop_id=shop_id, order_for=order_for)
+            .prefetch_related(
+                Prefetch(
+                    "ordersitems_set",
+                    queryset=OrdersItems.objects.select_related("item").order_by("item__tbl", "item__pos", "item__name")
+                )
+            )
+            .order_by("created")
+        )
+
+        for order in orders:
+            if order.comment:
+                order_comments.append(order.comment)
+            for oi in order.ordersitems_set.all():
+                name = getattr(oi.item, "name", None)
+                if not name:
+                    continue
+                qty = int(oi.quantity or 0)
+                order_type = getattr(oi, "order_type", "Обычный")
+                if order_type == "Спец. заказ":
+                    totals_special[name] = totals_special.get(name, 0) + qty
+                else:
+                    totals_plain[name] = totals_plain.get(name, 0) + qty
+                if oi.comment:
+                    item_comments.setdefault(name, []).append(oi.comment)
+
+        tbl_groups: dict[int, list] = {}
+        for item in all_items:
+            tbl = item['tbl'] if item['tbl'] is not None else 3
+            tbl_groups.setdefault(tbl, []).append(item)
+
+        tables = []
+        for tbl_index in range(4):
+            items = tbl_groups.get(tbl_index, [])
+            tables.append([
+                {
+                    'name': i['name'],
+                    'plain': totals_plain.get(i['name'], 0),
+                    'special': totals_special.get(i['name'], 0),
+                    'comment': '; '.join(item_comments.get(i['name'], [])),
+                }
+                for i in items
+            ])
+
+        ctx = {
+            'order_for': order_for,
+            'shop': shop,
+            'tables': tables,
+            'order_comments': order_comments,
+        }
+        return TemplateResponse(request, "admin/orders/print_shop.html", ctx)
 
     def get_urls(self):
 
@@ -168,6 +318,26 @@ class OrdersAdmin(admin.ModelAdmin):
             path("export/shop/",
                 self.admin_site.admin_view(self.export_shop_view),
                 name="orders_export_shop"),
+
+            path("order/<str:order_id>/toggle-disabled/",
+                self.admin_site.admin_view(self.toggle_disabled_view),
+                name="orders_toggle_disabled"),
+
+            path("order/<str:order_id>/toggle-completed/",
+                self.admin_site.admin_view(self.toggle_completed_view),
+                name="orders_toggle_completed"),
+
+            path("order/<str:order_id>/delete/",
+                self.admin_site.admin_view(self.delete_order_view),
+                name="orders_delete_order"),
+
+            path("print/totals/",
+                self.admin_site.admin_view(self.print_totals_view),
+                name="orders_print_totals"),
+
+            path("print/shop/",
+                self.admin_site.admin_view(self.print_shop_view),
+                name="orders_print_shop"),
         ]
 
         return custom + urls
@@ -175,11 +345,13 @@ class OrdersAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
 
         ctx = {
-            **self.admin_site.each_context(request), 
+            **self.admin_site.each_context(request),
             "title": "Заявки",
             "data_url": "live-data/",
             "archive_url": "archive/",
             "export_url": "export/totals/",
+            "show_archive_link": True,
+            "archive_heading": "Архив",
             "opts": self.model._meta,
             **(extra_context or {}),
         }
@@ -189,6 +361,17 @@ class OrdersAdmin(admin.ModelAdmin):
         """Returns JSON for the live page (newest 5 days)."""
         payload = _orders_payload(max_days=5, offset_days=0)
         return JsonResponse(payload)
+    
+    def delete_order_view(self, request: HttpRequest, order_id: str) -> JsonResponse:
+        if request.method != 'POST':
+            return JsonResponse({'error': 'POST required'}, status=405)
+        try:
+            order = Orders.objects.get(id=order_id)
+            OrdersItems.objects.filter(order=order).delete()
+            order.delete()
+            return JsonResponse({'deleted': True})
+        except Orders.DoesNotExist:
+            return JsonResponse({'error': 'not found'}, status=404)
 
     def archive_view(self, request: HttpRequest) -> HttpResponse:
         """Renders the archive HTML page (orders older than 5 days)."""
@@ -196,10 +379,33 @@ class OrdersAdmin(admin.ModelAdmin):
             **self.admin_site.each_context(request),
             "title": "Архив заявок",
             "data_url": "data/",
-            "live_url": "../", 
+            "live_url": "../",
+            "show_live_link": True,
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/orders/archive.html", ctx)
+
+    def toggle_disabled_view(self, request: HttpRequest, order_id: str) -> JsonResponse:
+        if request.method != 'POST':
+            return JsonResponse({'error': 'POST required'}, status=status.HTTP_405_METHOD_NOT_ALLOWED )
+        try:
+            order = Orders.objects.get(id=order_id)
+            order.disabled = not order.disabled
+            order.save(update_fields=['disabled'])
+            return JsonResponse({'disabled': order.disabled})
+        except Orders.DoesNotExist:
+            return JsonResponse({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    def toggle_completed_view(self, request: HttpRequest, order_id: str) -> JsonResponse:
+        if request.method != 'POST':
+            return JsonResponse({'error': 'POST required'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        try:
+            order = Orders.objects.get(id=order_id)
+            order.completed = not order.completed
+            order.save(update_fields=['completed'])
+            return JsonResponse({'completed': order.completed})
+        except Orders.DoesNotExist:
+            return JsonResponse({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def archive_data_view(self, request: HttpRequest) -> JsonResponse:
         """Returns JSON for the archive page (everything older than 5 days)."""
@@ -209,7 +415,7 @@ class OrdersAdmin(admin.ModelAdmin):
     def export_totals_view(self, request: HttpRequest) -> HttpResponse:
         order_for = parse_date(request.GET.get("order_for") or "")
         if not order_for:
-            return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=400)
+            return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=status.HTTP_400_BAD_REQUEST)
 
         all_items = list(
             Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')
@@ -307,7 +513,7 @@ class OrdersAdmin(admin.ModelAdmin):
 
         totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
         totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
-        item_comments: dict[str, str] = {}
+        item_comments: dict[str, list[str]] = {}
         order_comments: list[str] = []
 
         orders = (
@@ -336,7 +542,7 @@ class OrdersAdmin(admin.ModelAdmin):
                 else:
                     totals_plain[name] = totals_plain.get(name, 0) + qty
                 if oi.comment:
-                    item_comments[name] = oi.comment
+                    item_comments.setdefault(name, []).append(oi.comment)
 
         # Group items by tbl
         tbl_groups: dict[int, list] = {}
@@ -417,6 +623,66 @@ class ShopsAdmin(admin.ModelAdmin):
     list_display = ['id', 'address', 'shop_group']
     list_editable = ['shop_group']
     list_display_links = ['id']
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path('register-device/',
+                 self.admin_site.admin_view(self.register_device_view),
+                 name='shops_register_device'),
+        ]
+        return custom + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['register_device_url'] = 'register-device/'
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def register_device_view(self, request: HttpRequest) -> HttpResponse:
+        error = None
+        success = None
+
+        if request.method == 'POST':
+            code = request.POST.get('code', '').strip()
+            shop_id = request.POST.get('shop_id', '').strip()
+
+            r = get_redis()
+            key = f'device_reg:{code}'
+            android_id = r.get(key)
+            if not android_id:
+                error = 'Код не найден или истёк'
+            else:
+                android_id = android_id.decode('utf-8') if isinstance(android_id, bytes) else android_id
+                r.delete(key)
+                try:
+                    shop = Shops.objects.get(id=shop_id)
+                    shop.android_id = android_id
+                    shop.save(update_fields=['android_id'])
+                    success = f'Устройство успешно привязано к магазину {shop.address}'
+                except Shops.DoesNotExist:
+                    error = 'Магазин не найден'
+           
+
+            if not android_id:
+                error = 'Код не найден или истёк'
+            else:
+                try:
+                    shop = Shops.objects.get(id=shop_id)
+                    shop.android_id = android_id
+                    shop.save(update_fields=['android_id'])
+                    success = f'Устройство успешно привязано к магазину {shop.address}'
+                except Shops.DoesNotExist:
+                    error = 'Магазин не найден'
+
+        shops = Shops.objects.order_by('address').values('id', 'address')
+        ctx = {
+            **self.admin_site.each_context(request),
+            'shops': shops,
+            'error': error,
+            'success': success,
+            'opts': self.model._meta,
+        }
+        return TemplateResponse(request, 'admin/orders/register_device.html', ctx)
 
 @admin.register(ShopsGroups)
 class ShopsGroupsAdmin(admin.ModelAdmin):

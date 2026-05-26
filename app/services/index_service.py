@@ -38,6 +38,7 @@ class IndexService:
             cart_repo=cart_repo, session_id=session_id
         )
         is_admin = await AuthService.ensure_admin(uow=uow, cashier_id=cashier_id)
+        cashier_name = await uow.cashiers.get_full_name(cashier_id=cashier_id)
         grouped_items = IndexService._group_items(items)
 
         return {
@@ -49,6 +50,7 @@ class IndexService:
             'is_admin': is_admin,
             'shops': shops,
             'preselected_shop_id': str(preselected_shop_id) if preselected_shop_id else None,
+            'cashier_name': cashier_name or cashier_id,
         }
 
     @staticmethod

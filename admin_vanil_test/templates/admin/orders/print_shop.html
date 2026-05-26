@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ shop.address }} — {{ order_for }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 1cm;
+        }
+        h2 {
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .col {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 3px 6px;
+        }
+        th {
+            background: #f0f0f0;
+            text-align: left;
+        }
+        td:not(:first-child) {
+            text-align: right;
+        }
+        .order-comments {
+            margin-top: 24px;
+            font-size: 11px;
+        }
+        @media print {
+            @page { 
+                margin: 0.3cm;
+            }
+            body {
+                font-size: 9px;
+                margin: 0;
+                padding: 0;
+            }
+            .grid {
+                gap: 8px;
+            }
+            .col {
+                gap: 8px;
+            }
+            table {
+                page-break-inside: avoid;
+            }
+        
+        }
+        .col {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+<body>
+<div class="header" style="display:flex;justify-content:space-between;margin-bottom:8px;">
+    <span>{% now "d.m.Y, H:i" %}</span>
+    <span><b>{{ shop.address }} — {{ order_for }}></b></span>
+</div>
+
+<div class="grid">
+    <div class="col">
+        {% for table in tables|slice:":2" %}
+        {% if table %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Позиция</th>
+                    <th>Обычный</th>
+                    <th>Спец. заказ</th>
+                    <th>Комментарий</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in table %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.plain }}</td>
+                    <td>{{ item.special }}</td>
+                    <td>{{ item.comment }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% endfor %}
+    </div>
+    <div class="col">
+        {% for table in tables|slice:"2:" %}
+        {% if table %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Позиция</th>
+                    <th>Обычный</th>
+                    <th>Спец. заказ</th>
+                    <th>Комментарий</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in table %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.plain }}</td>
+                    <td>{{ item.special }}</td>
+                    <td>{{ item.comment }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% if order_comments %}
+<div class="order-comments">
+    <strong>Комментарии к заказам:</strong>
+    <ul>
+        {% for comment in order_comments %}
+        <li>{{ comment }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+<script>window.print();</script>
+</body>
+</html>

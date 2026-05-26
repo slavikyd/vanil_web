@@ -1,9 +1,9 @@
+import logging
 import uuid
 from datetime import date
 from typing import Literal
 
 from asyncpg import Connection
-import logging
 
 
 class OrdersRepo:
@@ -66,6 +66,9 @@ class OrdersRepo:
         notes = [(comments.get(item_id) or '').strip() or None for item_id in cart]
         types = [order_types.get(item_id) or 'Обычный' for item_id in cart]
         logging.getLogger(__name__).warning(f'DEBUG types: {types}')
+        logging.getLogger(__name__).warning(f'DEBUG notes: {notes}')
+        logging.getLogger(__name__).warning(f'DEBUG comments: {comments}')
+        logging.getLogger(__name__).warning(f'DEBUG cart keys: {list(cart.keys())}')
 
         await self._conn.execute(
             """
@@ -176,18 +179,20 @@ class OrdersRepo:
 
         rows = await self._conn.fetch(
             f"""
-            SELECT
-              o.id AS order_id,
-              o.order_for,
-              o.created,
-              o.address,
-              oi.quantity,
-              i.name AS item_name
-            FROM orders o
-            JOIN orders_items oi ON oi.order_id = o.id
-            JOIN items i ON oi.item_id = i.id
-            WHERE o.cashier_id = $1 AND {conditions[date_filter]}
-            ORDER BY o.order_for DESC, o.created DESC
+                SELECT
+                o.id AS order_id,
+                o.order_for,
+                o.created,
+                o.address,
+                c.full_name AS cashier_name,
+                oi.quantity,
+                i.name AS item_name
+                FROM orders o
+                JOIN cashiers c ON o.cashier_id = c.id
+                JOIN orders_items oi ON oi.order_id = o.id
+                JOIN items i ON oi.item_id = i.id
+                WHERE o.cashier_id = $1 AND {conditions[date_filter]}
+                ORDER BY o.order_for DESC, o.created DESC
             """,
             cashier_id,
             today,
@@ -200,6 +205,7 @@ class OrdersRepo:
                 'address': r['address'],
                 'item_name': r['item_name'],
                 'quantity': int(r['quantity']),
+                'cashier_name': r['cashier_name'],
             }
             for r in rows
         ]

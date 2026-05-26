@@ -1,0 +1,31 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<h1>Регистрация устройства</h1>
+
+{% if error %}
+<p style="color: red;">{{ error }}</p>
+{% endif %}
+
+{% if success %}
+<p style="color: green;">{{ success }}</p>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    <p>
+        <label for="code">Код с устройства:</label><br>
+        <input type="text" id="code" name="code" maxlength="6" required>
+    </p>
+    <p>
+        <label for="shop_id">Магазин:</label><br>
+        <select id="shop_id" name="shop_id" required>
+            <option value="" disabled selected>Выберите магазин</option>
+            {% for shop in shops %}
+            <option value="{{ shop.id }}">{{ shop.address }}</option>
+            {% endfor %}
+        </select>
+    </p>
+    <button type="submit">Привязать</button>
+</form>
+{% endblock %}

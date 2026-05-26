@@ -23,6 +23,7 @@ class FakeCartRepo:
     def __init__(self, redis):
         self._redis = redis
         self._comments: dict[str, dict[str, str]] = {}
+        self._order_types: dict[str, dict[str, str]] = {}
 
     @staticmethod
     def _key(session_id: str) -> str:
@@ -56,10 +57,18 @@ class FakeCartRepo:
             bucket.pop(str(item_id), None)
         else:
             bucket[str(item_id)] = comment
+    async def get_order_types(self, *, session_id: str) -> dict[str, str]:
+        return dict(self._order_types.get(session_id, {}))
+
+    async def set_order_type(self, *, session_id: str, item_id: str, order_type: str) -> None:
+        bucket = self._order_types.setdefault(session_id, {})
+        bucket[str(item_id)] = order_type
 
     async def clear(self, *, session_id: str) -> None:
         await self._redis.delete(self._key(session_id))
         self._comments.pop(session_id, None)
+        self._order_types.pop(session_id, None)
+
 
 
 @pytest.fixture(scope='session')

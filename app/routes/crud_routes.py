@@ -1,8 +1,11 @@
-from datetime import date
 import logging
+import uuid
+from datetime import date
+
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-import uuid
+
+from app.metrics import orders_created, orders_failed, cart_items_added, cart_cleared, order_size
 from app.infrastructure.redis.cart_repo import RedisCartRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow
@@ -28,6 +31,7 @@ def group_orders_by_day(rows: list[dict]) -> dict[str, list[dict]]:
                 'id': oid,
                 'created': r['created'],
                 'address': r['address'],
+                'cashier_name': r['cashier_name'],
                 'items': [],
             }
             day_bucket.append(order)
@@ -56,7 +60,7 @@ async def add_to_cart(
         quantity=quantity,
     )
     logger.debug('cart item updated', extra={'session_id': session_id, 'item_id': itemid, 'quantity': quantity}) # TODO: possibly remove this debugging log message
-
+    cart_items_added.inc()
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)
     comments = await CartService.get_comments(
         cart_repo=cart_repo, session_id=session_id
@@ -152,9 +156,11 @@ async def place_order(
         )
     except EmptyCartError:
         logger.warning('order attempt with empty cart', extra={'cashier_id': cashier_id})
+        orders_failed.labels(reason='empty_cart').inc()
         return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
     except InvalidOrderDateError:
         logger.exception('order creation failed: impossible date', extra={'cashier_id': cashier_id, 'date': order_for})
+        orders_failed.labels(reason='invalid_date').inc()
         return HTMLResponse('Invalid order date', status_code=status.HTTP_400_BAD_REQUEST)
     except ValueError as e:
         logger.warning('order creation failed: invalid shop', extra={'cashier_id': cashier_id, 'error': str(e)})
@@ -162,11 +168,17 @@ async def place_order(
 
     except Exception as e:
         logger.exception('order creation failed', extra={'cashier_id': cashier_id, 'error': str(e)})
+        orders_failed.labels(reason='unknown').inc()
         return HTMLResponse(
             f'Failed to create order: {e}', status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     logger.info('order placed successfully', extra={'cashier_id': cashier_id, 'order_for': order_for})
+    orders_created.labels(cashier_id=cashier_id, shop_id=str(shop_id)).inc()
+    order_size.observe(len(cart))
+    
+    
     await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
+    
     return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
@@ -183,9 +195,11 @@ async def orders_view(
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='today')
     grouped = group_orders_by_day(rows)
     today_orders = grouped.get(date.today().isoformat(), [])
+    assert uow.cashiers is not None
+    cashier_name = await uow.cashiers.get_full_name(cashier_id=cashier_id)
     return templates.TemplateResponse(
         'orders.html',
-        {'request': request, 'today_orders': today_orders},
+        {'request': request, 'today_orders': today_orders, 'cashier_name': cashier_name or cashier_id},
     )
 
 
@@ -201,9 +215,11 @@ async def orders_archive_view(
     assert uow.orders is not None
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='past')
     grouped = group_orders_by_day(rows)
+    assert uow.cashiers is not None
+    cashier_name = await uow.cashiers.get_full_name(cashier_id=cashier_id)
     return templates.TemplateResponse(
         'orders_archive.html',
-        {'request': request, 'archive_orders': grouped},
+        {'request': request, 'archive_orders': grouped, 'cashier_name': cashier_name or cashier_id,},
     )
 
 @router.get('/orders/future', response_class=HTMLResponse)
@@ -219,10 +235,11 @@ async def orders_future_view(
 
     rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='future')
     grouped = group_orders_by_day(rows)
-
+    assert uow.cashiers is not None
+    cashier_name = await uow.cashiers.get_full_name(cashier_id=cashier_id)
     return templates.TemplateResponse(
         'orders_future.html',
-        {'request': request, 'future_orders': grouped},
+        {'request': request, 'future_orders': grouped, 'cashier_name': cashier_name or cashier_id,},
     )
 
 @router.post('/set-order-type')

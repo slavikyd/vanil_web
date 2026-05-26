@@ -4,7 +4,9 @@ import uuid
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.metrics import cart_cleared
 from app.infrastructure.redis.cart_repo import RedisCartRepo
+from app.infrastructure.redis.device_repo import DeviceRepo
 from app.infrastructure.uow import AsyncpgUnitOfWork
 from app.routes.deps import get_cart_repo, get_uow
 from app.routes.session_utils import get_or_create_session_id
@@ -23,6 +25,9 @@ async def index(
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
     shop_id: uuid.UUID | None = None,
 ):
+    if shop_id:
+        request.session['shop_id'] = str(shop_id)
+
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
         return templates.TemplateResponse(
@@ -31,6 +36,9 @@ async def index(
         )
 
     session_id = get_or_create_session_id(request.session)
+
+    if not shop_id and request.session.get('shop_id'):
+        shop_id = uuid.UUID(request.session['shop_id'])
 
     ctx = await IndexService.get_index_context(
         uow=uow,
@@ -68,10 +76,13 @@ async def logout(
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
 ):
     session_id = request.session.get('session_id')
+    shop_id = request.session.get('shop_id')
     if session_id:
         await CartService.clear_cart(cart_repo=cart_repo, session_id=session_id)
-
+    cart_cleared.inc()
     request.session.clear()
+    if shop_id:
+        request.session['shop_id'] = shop_id
     return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
 
@@ -103,3 +114,23 @@ async def shop_by_device(
     assert uow.shops is not None
     shop_id = await uow.shops.find_by_android_id(android_id=android_id)
     return JSONResponse({'shop_id': str(shop_id) if shop_id else None})
+
+@router.post('/api/register-device')
+async def register_device(
+    android_id: str,
+):
+    device_repo = DeviceRepo()
+    code = await device_repo.create_code(android_id=android_id)
+    return JSONResponse({'code': code})
+
+@router.get('/instr', response_class=HTMLResponse)
+async def instructions(request: Request):
+    return templates.TemplateResponse('instr.html', {'request': request})
+
+@router.get('/admin-instruction', response_class=HTMLResponse)
+async def instructions(request: Request):
+    return templates.TemplateResponse('admin_instr.html', {'request': request})
+
+@router.get('/links', response_class=HTMLResponse)
+async def links_page(request: Request):
+    return templates.TemplateResponse('links_page.html', {'request': request})

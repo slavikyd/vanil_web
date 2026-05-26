@@ -1,5 +1,7 @@
-from asyncpg import Connection
 import uuid
+
+from asyncpg import Connection
+
 
 class ShopsRepo:
     def __init__(self, conn: Connection):

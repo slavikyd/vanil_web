@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+
 from pythonjsonlogger import jsonlogger
 
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

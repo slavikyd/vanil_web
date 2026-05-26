@@ -2,6 +2,6 @@ import uuid
 
 ADMIN_ID = "admin-test"
 USER_ID = "user-test"
-SHOP_ID = "shop-test"
+SHOP_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 
 ITEM_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
