@@ -126,6 +126,9 @@
     const columns = [[], [], [], []];
     const unassigned = [];
 
+    function highlight(td, value) {
+    if (Number(value) !== 0) td.style.background = '#fff3cd';
+  }
 
     const grid = el('div', { class: 'totals-grid' });
     const store = readStockStore();
@@ -168,6 +171,7 @@
         const specialTd = el('td', { class: 'num', text: String(ordered_special) });
         const orderedTd = el('td', { class: 'num', text: String(ordered_shop) });
         const priorityTd = el('td', { class: 'num', text: String(ordered_priority) });
+        highlight(specialTd, ordered_special);
 
         const k = stockKey(dayIso, t.name);
         const stored = Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null;
