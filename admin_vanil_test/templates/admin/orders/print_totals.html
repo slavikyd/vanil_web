@@ -9,6 +9,12 @@
             font-size: 11px;
             margin: 1cm;
         }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
         .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -35,22 +41,29 @@
             text-align: right;
         }
         @media print {
-            @page { 
+            @page {
                 margin: 0.3cm;
             }
             body {
-                font-size: 9px;
+                font-size: 8px;
                 margin: 0;
                 padding: 0;
             }
+            .header {
+                font-size: 8px;
+                margin-bottom: 4px;
+            }
             .grid {
-                gap: 8px;
+                gap: 6px;
             }
             .col {
-                gap: 8px;
+                gap: 6px;
             }
             table {
                 page-break-inside: avoid;
+            }
+            th, td {
+                padding: 1px 3px;
             }
         }
         .col {
@@ -59,6 +72,10 @@
     </style>
 </head>
 <body>
+<div class="header">
+    <span>{% now "d.m.Y, H:i" %}</span>
+    <span>Итоги {{ order_for }}</span>
+</div>
 <div class="grid">
     <div class="col">
         {% for table in tables|slice:":2" %}
@@ -70,6 +87,8 @@
                     <th>Заказ с магазина</th>
                     <th>Заказ</th>
                     <th>Юбик</th>
+                    <th>Остаток</th>
+                    <th>Не хватает</th>
                 </tr>
             </thead>
             <tbody>
@@ -79,6 +98,8 @@
                     <td>{{ item.plain }}</td>
                     <td>{{ item.special }}</td>
                     <td>{{ item.priority }}</td>
+                    <td></td>
+                    <td></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -96,6 +117,8 @@
                     <th>Заказ с магазина</th>
                     <th>Заказ</th>
                     <th>Юбик</th>
+                    <th>Остаток</th>
+                    <th>Не хватает</th>
                 </tr>
             </thead>
             <tbody>
@@ -105,6 +128,8 @@
                     <td>{{ item.plain }}</td>
                     <td>{{ item.special }}</td>
                     <td>{{ item.priority }}</td>
+                    <td></td>
+                    <td></td>
                 </tr>
                 {% endfor %}
             </tbody>

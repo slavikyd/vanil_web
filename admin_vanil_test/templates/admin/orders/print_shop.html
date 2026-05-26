@@ -68,7 +68,10 @@
     </style>
 </head>
 <body>
-<h2>{{ shop.address }} — {{ order_for }}</h2>
+<div class="header" style="display:flex;justify-content:space-between;margin-bottom:8px;">
+    <span>{% now "d.m.Y, H:i" %}</span>
+    <span>{{ shop.address }} — {{ order_for }}</span>
+</div>
 <div class="grid">
     <div class="col">
         {% for table in tables|slice:":2" %}
