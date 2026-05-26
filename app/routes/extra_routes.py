@@ -130,3 +130,7 @@ async def instructions(request: Request):
 @router.get('/admin-instruction', response_class=HTMLResponse)
 async def instructions(request: Request):
     return templates.TemplateResponse('admin_instr.html', {'request': request})
+
+@router.get('/links', response_class=HTMLResponse)
+async def links_page(request: Request):
+    return templates.TemplateResponse('links_page.html', {'request': request})

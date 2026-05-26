@@ -276,18 +276,14 @@ function renderShopSummary(dayIso, shopData, allItems) {
 }
 
 function renderShops(day, dayIso, allItems) {
-  // Build lookup: shop_id -> shop data (orders etc)
   const shopDataMap = {};
   for (const s of (day.shops || [])) {
     shopDataMap[s.shop_id] = s;
   }
 
   const wrap = el('div');
-
-  // Tab strip
   const tabStrip = el('div', { style: 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;' });
   const tabContents = el('div');
-
   const allShops = (window._allShops || []);
 
   allShops.forEach((shop, idx) => {
@@ -303,18 +299,14 @@ function renderShops(day, dayIso, allItems) {
     const pane = el('div', { style: idx === 0 ? '' : 'display:none;' });
     const shopData = shopDataMap[shop.id] || null;
 
-    // Summary table
     pane.appendChild(renderShopSummary(dayIso, shopData, allItems));
 
-    // Export link
     pane.appendChild(el('a', {
       href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
       text: 'Экспорт в Excel',
       style: 'display:inline-block; margin: 8px 0 12px; font-size:12px;',
     }));
 
-
-    // print link
     pane.appendChild(el('a', {
       href: `/admin/core/orders/print/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
       text: 'Печать',
@@ -322,7 +314,6 @@ function renderShops(day, dayIso, allItems) {
       style: 'display:inline-block; margin: 8px 0 12px 8px; font-size:12px;',
     }));
 
-    // Orders list
     if (!shopData || !shopData.orders.length) {
       pane.appendChild(el('div', { text: 'Нет заявок', style: 'color:var(--body-quiet-color); margin-top:8px;' }));
     } else {
@@ -354,7 +345,6 @@ function renderShops(day, dayIso, allItems) {
             const data = await resp.json();
             o.disabled = data.disabled;
             order.style.opacity = data.disabled ? '0.45' : '';
-            // recompute summary in place
             const newGrid = renderShopSummary(dayIso, shopData, allItems);
             const oldGrid = pane.querySelector('.totals-grid');
             if (oldGrid) pane.replaceChild(newGrid, oldGrid);
@@ -373,6 +363,9 @@ function renderShops(day, dayIso, allItems) {
             completeBtn.style.background = data.completed ? 'var(--primary)' : '';
             completeBtn.style.color = data.completed ? '#fff' : '';
             completeBtn.style.borderColor = data.completed ? 'var(--primary)' : '';
+            const newGrid = renderShopSummary(dayIso, shopData, allItems);
+            const oldGrid = pane.querySelector('.totals-grid');
+            if (oldGrid) pane.replaceChild(newGrid, oldGrid);
           }
         });
 
@@ -387,12 +380,16 @@ function renderShops(day, dayIso, allItems) {
             shopData.orders = shopData.orders.filter(ord => ord.id !== o.id);
             const newGrid = renderShopSummary(dayIso, shopData, allItems);
             const oldGrid = pane.querySelector('.totals-grid');
-            if (oldGrid) pane.replaceChild(newGrid, oldGrid); 
+            if (oldGrid) pane.replaceChild(newGrid, oldGrid);
           }
         });
 
-        order.appendChild(el('div', { class: 'order-head' }, [
-          el('div', { text: `${o.created_hhmm} | ${o.cashier_name}` }),
+        // Collapsible order: summary line always visible, items+comment inside details
+        const orderDetails = el('details', { open: true });
+
+        const orderSummary = el('summary', { style: 'cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px;' });
+        orderSummary.appendChild(el('div', { text: `${o.created_hhmm} | ${o.cashier_name}` }));
+        orderSummary.appendChild(
           el('div', { style: 'display:flex; align-items:center; gap:8px;' }, [
             el('label', { style: 'display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;' }, [
               disableCb,
@@ -400,8 +397,9 @@ function renderShops(day, dayIso, allItems) {
             ]),
             completeBtn,
             deleteBtn,
-          ]),
-        ]));
+          ])
+        );
+        orderDetails.appendChild(orderSummary);
 
         const ul = el('ul', { class: 'items' });
         for (const it of (o.items || [])) {
@@ -410,7 +408,16 @@ function renderShops(day, dayIso, allItems) {
           li.appendChild(el('b', { text: String(it.quantity || 0) }));
           ul.appendChild(li);
         }
-        order.appendChild(ul);
+        orderDetails.appendChild(ul);
+
+        if (o.comment) {
+          orderDetails.appendChild(el('div', {
+            text: `💬 ${o.comment}`,
+            style: 'margin-top:6px; font-size:12px; color:var(--body-quiet-color); font-style:italic;',
+          }));
+        }
+
+        order.appendChild(orderDetails);
         pane.appendChild(order);
       }
     }
