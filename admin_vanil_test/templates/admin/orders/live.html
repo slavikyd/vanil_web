@@ -238,6 +238,9 @@
 
 function renderShopSummary(dayIso, shopData, allItems) {
   // Group items by tbl same as main grid
+  function highlight(td, value) {
+    if (Number(value) !== 0) td.style.background = '#fff3cd';
+  }
   const columns = [[], [], [], []];
   const unassigned = [];
   for (const item of allItems) {
