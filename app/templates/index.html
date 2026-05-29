@@ -233,16 +233,6 @@ document.addEventListener('DOMContentLoaded', () => {
         dateError.textContent = '';
     });
 
-    function applyCommentInputs(comments) {
-        if (!comments) return;
-        document.querySelectorAll('.item-comment-input').forEach((el) => {
-            const id = el.dataset.itemId;
-            if (Object.prototype.hasOwnProperty.call(comments, id)) {
-                el.value = comments[id] || '';
-            }
-        });
-    }
-
     window.sendUpdate = async (itemId, qty) => {
         const formData = new FormData();
         formData.append('itemid', itemId);
