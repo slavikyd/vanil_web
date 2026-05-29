@@ -268,9 +268,12 @@ function renderShopSummary(dayIso, shopData, allItems) {
     const tbody = el('tbody');
     for (const item of chunk) {
       const tr = el('tr');
+      const plainTd = el('td', { class: 'num', text: String(totals_plain[item.name] || 0) });
+      const specialTd = el('td', { class: 'num', text: String(totals_special[item.name] || 0) });
+      highlight(specialTd, totals_special[item.name] || 0);
       tr.appendChild(el('td', { text: item.name }));
-      tr.appendChild(el('td', { class: 'num', text: String(totals_plain[item.name] || 0) }));
-      tr.appendChild(el('td', { class: 'num', text: String(totals_special[item.name] || 0) }));
+      tr.appendChild(plainTd);
+tr.appendChild(specialTd);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -468,10 +471,13 @@ function renderShops(day, dayIso, allItems) {
       modes.appendChild(btnTotals);
       modes.appendChild(btnShops);
 
+      const exportTotalsLink = el('a', { href: `/admin/core/orders/export/totals/?order_for=${dayIso}`, text: 'Экспорт totals в Excel' });
+      const printTotalsLink = el('a', { href: `/admin/core/orders/print/totals/?order_for=${dayIso}`, text: 'Печать', target: '_blank' });
+
       const tools = el('div', { class: 'day-tools' }, [
-        modes,
-        el('a', { href: `/admin/core/orders/export/totals/?order_for=${dayIso}`, text: 'Экспорт totals в Excel' }),
-        el('a', { href: `/admin/core/orders/print/totals/?order_for=${dayIso}`, text: 'Печать', target: '_blank' }),
+          modes,
+          exportTotalsLink,
+          printTotalsLink,
       ]);
       details.appendChild(tools);
 
@@ -484,17 +490,21 @@ function renderShops(day, dayIso, allItems) {
 
       function setMode(mode) {
         if (mode === 'totals') {
-          btnTotals.classList.add('active');
-          btnShops.classList.remove('active');
-          totalsWrap.style.display = '';
-          shopsWrap.style.display = 'none';
+            btnTotals.classList.add('active');
+            btnShops.classList.remove('active');
+            totalsWrap.style.display = '';
+            shopsWrap.style.display = 'none';
+            exportTotalsLink.style.display = '';
+            printTotalsLink.style.display = '';
         } else {
-          btnTotals.classList.remove('active');
-          btnShops.classList.add('active');
-          totalsWrap.style.display = 'none';
-          shopsWrap.style.display = '';
+            btnTotals.classList.remove('active');
+            btnShops.classList.add('active');
+            totalsWrap.style.display = 'none';
+            shopsWrap.style.display = '';
+            exportTotalsLink.style.display = 'none';
+            printTotalsLink.style.display = 'none';
         }
-      }
+    }
 
       btnTotals.addEventListener('click', () => setMode('totals'));
       btnShops.addEventListener('click', () => setMode('shops'));
