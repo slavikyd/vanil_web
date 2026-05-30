@@ -90,6 +90,9 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             shop_id_key = str(getattr(o, 'shop_id', None) or o.address or 'unknown')
             shops_map.setdefault(shop_id_key, []).append(o)
 
+            if o.disabled or o.completed:
+                continue
+
             is_priority = (
                 getattr(getattr(o, "shop", None), "shop_group", None) is not None
                 and getattr(getattr(o.shop, "shop_group", None), "name", None) == PRIORITY_GROUP_NAME
