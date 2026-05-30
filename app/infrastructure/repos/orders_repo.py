@@ -39,6 +39,7 @@ class OrdersRepo:
         address: str,
         order_for: date,
         comment: str | None,
+        shipment: int,
     ) -> None:
         await self._conn.execute(
             """
@@ -51,6 +52,7 @@ class OrdersRepo:
             address,
             order_for,
             comment,
+            shipment,
         )
 
     async def add_items(
