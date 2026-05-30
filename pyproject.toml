@@ -12,7 +12,7 @@ testpaths = ["app/tests"]
 
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "3.13.13"
 fastapi = "^0.115.12"
 uvicorn = "^0.34.2"
 asyncpg = "^0.30.0"
@@ -28,6 +28,7 @@ pytest = "^9.0.2"
 httpx = "^0.28.1"
 python-json-logger = "^4.0.0"
 prometheus-fastapi-instrumentator = "^7.1.0"
+django = "^6.0.5"
 
 [tool.poetry.group.dev.dependencies]
 yoyo-migrations = "^9.0.0"

@@ -122,6 +122,7 @@ async def place_order(
     shop_id: uuid.UUID = Form(...),
     tg_id: str | None = Form(None), #TODO: DERPRACATED
     comment: str | None = Form(None),
+    shipment: int = Form(...),
 ):
     session = request.session
 
@@ -153,6 +154,7 @@ async def place_order(
             comment=comment,
             comments=comments,
             order_types=order_types,
+            shipment=shipment,
         )
     except EmptyCartError:
         logger.warning('order attempt with empty cart', extra={'cashier_id': cashier_id})

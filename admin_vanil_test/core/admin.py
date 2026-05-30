@@ -136,6 +136,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
                     "id": str(o.id),
                     "created": o.created.isoformat() if o.created else None,
                     "created_hhmm": o.created.strftime("%H:%M:%S") if o.created else "",
+                    "shipment": o.shipment,
                     "address": o.address,
                     "cashier_name": getattr(o.cashier, "full_name", "") if o.cashier_id else "",
                     "shop_id": getattr(o, "shop_id", None),
@@ -298,6 +299,88 @@ class OrdersAdmin(admin.ModelAdmin):
         }
         return TemplateResponse(request, "admin/orders/print_shop.html", ctx)
 
+    def print_all_shops_view(self, request: HttpRequest) -> HttpResponse:
+        order_for = parse_date(request.GET.get("order_for") or "")
+        if not order_for:
+            return HttpResponse("Missing ?order_for=YYYY-MM-DD", status=400)
+
+        all_items = list(
+            Items.objects.order_by("tbl", 'pos', 'name').values('name', 'tbl', 'pos')
+        )
+        all_items = [i for i in all_items if i['name']]
+
+        tbl_groups: dict[int, list] = {}
+        for item in all_items:
+            tbl = item['tbl'] if item['tbl'] is not None else 3
+            tbl_groups.setdefault(tbl, []).append(item)
+
+        shops = Shops.objects.order_by('address')
+        shops_data = []
+
+        for shop in shops:
+            totals_special: dict[str, int] = {i['name']: 0 for i in all_items}
+            totals_plain: dict[str, int] = {i['name']: 0 for i in all_items}
+            item_comments: dict[str, list[str]] = {}
+            order_comments: list[str] = []
+
+            orders = (
+                Orders.objects
+                .filter(shop_id=shop.id, order_for=order_for)
+                .prefetch_related(
+                    Prefetch(
+                        "ordersitems_set",
+                        queryset=OrdersItems.objects.select_related("item").order_by("item__tbl", "item__pos", "item__name")
+                    )
+                )
+                .order_by("created")
+            )
+
+            has_orders = False
+            for order in orders:
+                has_orders = True
+                if order.comment:
+                    order_comments.append(order.comment)
+                for oi in order.ordersitems_set.all():
+                    name = getattr(oi.item, "name", None)
+                    if not name:
+                        continue
+                    qty = int(oi.quantity or 0)
+                    order_type = getattr(oi, "order_type", "Обычный")
+                    if order_type == "Спец. заказ":
+                        totals_special[name] = totals_special.get(name, 0) + qty
+                    else:
+                        totals_plain[name] = totals_plain.get(name, 0) + qty
+                    if oi.comment:
+                        item_comments.setdefault(name, []).append(oi.comment)
+
+            if not has_orders:
+                continue
+
+            tables = []
+            for tbl_index in range(4):
+                items = tbl_groups.get(tbl_index, [])
+                tables.append([
+                    {
+                        'name': i['name'],
+                        'plain': totals_plain.get(i['name'], 0),
+                        'special': totals_special.get(i['name'], 0),
+                        'comment': '; '.join(item_comments.get(i['name'], [])),
+                    }
+                    for i in items
+                ])
+
+            shops_data.append({
+                'shop': shop,
+                'tables': tables,
+                'order_comments': order_comments,
+            })
+
+        ctx = {
+            'order_for': order_for,
+            'shops_data': shops_data,
+        }
+        return TemplateResponse(request, "admin/orders/print_all_shops.html", ctx)
+
     def get_urls(self):
 
         urls = super().get_urls()
@@ -341,6 +424,10 @@ class OrdersAdmin(admin.ModelAdmin):
             path("print/shop/",
                 self.admin_site.admin_view(self.print_shop_view),
                 name="orders_print_shop"),
+            
+            path('orders/print/all-shops/',
+                 self.admin_site.admin_view(self.print_all_shops_view),
+                 name='orders_print_all_shops'),
         ]
 
         return custom + urls

@@ -382,7 +382,7 @@ function renderShops(day, dayIso, allItems) {
         });
 
         order.appendChild(el('div', { class: 'order-head' }, [
-          el('div', { text: `${o.created_hhmm} | ${o.cashier_name}` }),
+          el('div', { text: `Рейс ${o.shipment} | ${o.created_hhmm} | ${o.cashier_name}`}),
           el('div', { style: 'display:flex; align-items:center; gap:8px;' }, [
             el('label', { style: 'display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;' }, [
               disableCb,

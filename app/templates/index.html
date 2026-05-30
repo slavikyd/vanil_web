@@ -136,6 +136,14 @@ async function registerDevice() {
 {% if preselected_shop_id %}
 <input type="hidden" name="shop_id" value="{{ preselected_shop_id }}">
 {% endif %}
+<label for="shipment">Рейс:</label><br>
+<select id="shipment" name="shipment" required>
+    <option value="" disabled selected>Выберите рейс</option>
+    <option value="1">Рейс 1</option>
+    <option value="2">Рейс 2</option>
+    <option value="3">Рейс 3</option>
+</select>
+<br><br>
 <div id="dateError" style="color: red; margin-top: 0.5em;"></div>
 <br>
 

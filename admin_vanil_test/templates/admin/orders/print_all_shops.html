@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Все магазины — {{ order_for }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 1cm;
+        }
+        .shop-block {
+            page-break-after: always;
+        }
+        .shop-block:last-child {
+            page-break-after: avoid;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .col {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 3px 6px;
+        }
+        th {
+            background: #f0f0f0;
+            text-align: left;
+        }
+        td:not(:first-child) {
+            text-align: right;
+        }
+        .order-comments {
+            margin-top: 16px;
+            font-size: 11px;
+        }
+        @media print {
+            @page {
+                margin: 0.3cm;
+            }
+            body {
+                font-size: 8px;
+                margin: 0;
+                padding: 0;
+            }
+            .header {
+                font-size: 8px;
+                margin-bottom: 4px;
+            }
+            .grid {
+                gap: 6px;
+            }
+            .col {
+                gap: 6px;
+            }
+            th, td {
+                padding: 1px 3px;
+            }
+            table {
+                page-break-inside: avoid;
+            }
+        }
+        .col {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+<body>
+{% for entry in shops_data %}
+<div class="shop-block">
+    <div class="header">
+        <span>{% now "d.m.Y, H:i" %}</span>
+        <span>{{ entry.shop.address }} — {{ order_for }}</span>
+    </div>
+    <div class="grid">
+        <div class="col">
+            {% for table in entry.tables|slice:":2" %}
+            {% if table %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Позиция</th>
+                        <th>Обычный</th>
+                        <th>Спец. заказ</th>
+                        <th>Комментарий</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in table %}
+                    <tr>
+                        <td>{{ item.name }}</td>
+                        <td>{{ item.plain }}</td>
+                        <td>{{ item.special }}</td>
+                        <td>{{ item.comment }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+            {% endfor %}
+        </div>
+        <div class="col">
+            {% for table in entry.tables|slice:"2:" %}
+            {% if table %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Позиция</th>
+                        <th>Обычный</th>
+                        <th>Спец. заказ</th>
+                        <th>Комментарий</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in table %}
+                    <tr>
+                        <td>{{ item.name }}</td>
+                        <td>{{ item.plain }}</td>
+                        <td>{{ item.special }}</td>
+                        <td>{{ item.comment }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% if entry.order_comments %}
+    <div class="order-comments">
+        <strong>Комментарии:</strong>
+        <ul>
+            {% for comment in entry.order_comments %}
+            <li>{{ comment }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+<script>window.print();</script>
+</body>
+</html>

@@ -104,6 +104,7 @@ class Orders(models.Model):
     comment = models.TextField(null=True, blank=True, max_length=255)
     disabled = models.BooleanField(default=False)
     completed = models.BooleanField(default=False)
+    shipment = models.SmallIntegerField(default=1)
 
     class Meta:
         managed = True

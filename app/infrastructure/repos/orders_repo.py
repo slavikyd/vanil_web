@@ -42,8 +42,8 @@ class OrdersRepo:
     ) -> None:
         await self._conn.execute(
             """
-            INSERT INTO orders (id, cashier_id, shop_id, address, order_for, comment)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO orders (id, cashier_id, shop_id, address, order_for, comment, shipment)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             """,
             order_id,
             cashier_id,
