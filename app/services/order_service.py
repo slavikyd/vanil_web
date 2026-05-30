@@ -27,6 +27,7 @@ class OrderService:
         comment: dict[str, str],
         comments: dict[str, str],
         order_types: dict[str, str],
+        shipment: int,
 
     ) -> uuid.UUID:
         if not cart:
@@ -53,7 +54,8 @@ class OrderService:
                 shop_id=shop_id,
                 address=address,
                 order_for=order_for_date,
-                comment=comment
+                comment=comment,
+                shipment=shipment,
             )
             await uow.orders.add_items(
                 order_id=order_id, cart=cart, comments=comments, order_types=order_types,
