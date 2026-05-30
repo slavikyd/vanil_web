@@ -425,7 +425,7 @@ class OrdersAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.print_shop_view),
                 name="orders_print_shop"),
             
-            path('orders/print/all-shops/',
+            path('print/all-shops/',
                  self.admin_site.admin_view(self.print_all_shops_view),
                  name='orders_print_all_shops'),
         ]
