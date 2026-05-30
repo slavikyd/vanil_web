@@ -285,7 +285,7 @@ tr.appendChild(specialTd);
   return grid;
 }
 
-function renderShops(day, dayIso, allItems) {
+function renderShops(day, dayIso, allItems, onShopSelect) {
   const shopDataMap = {};
   for (const s of (day.shops || [])) {
     shopDataMap[s.shop_id] = s;
@@ -311,18 +311,18 @@ function renderShops(day, dayIso, allItems) {
 
     pane.appendChild(renderShopSummary(dayIso, shopData, allItems));
 
-    pane.appendChild(el('a', {
-      href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
-      text: 'Экспорт в Excel',
-      style: 'display:inline-block; margin: 8px 0 12px; font-size:12px;',
-    }));
+    // pane.appendChild(el('a', {
+    //   href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
+    //   text: 'Экспорт в Excel',
+    //   style: 'display:inline-block; margin: 8px 0 12px; font-size:12px;',
+    // }));
 
-    pane.appendChild(el('a', {
-      href: `/admin/core/orders/print/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
-      text: 'Печать',
-      target: '_blank',
-      style: 'display:inline-block; margin: 8px 0 12px 8px; font-size:12px;',
-    }));
+    // pane.appendChild(el('a', {
+    //   href: `/admin/core/orders/print/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
+    //   text: 'Печать',
+    //   target: '_blank',
+    //   style: 'display:inline-block; margin: 8px 0 12px 8px; font-size:12px;',
+    // }));
 
     if (!shopData || !shopData.orders.length) {
       pane.appendChild(el('div', { text: 'Нет заявок', style: 'color:var(--body-quiet-color); margin-top:8px;' }));
@@ -437,7 +437,8 @@ function renderShops(day, dayIso, allItems) {
       tabBtn.classList.add('active');
       tabContents.querySelectorAll(':scope > div').forEach(p => p.style.display = 'none');
       pane.style.display = '';
-    });
+      if (onShopSelect) onShopSelect(shop.id);
+  });
 
     tabStrip.appendChild(tabBtn);
     tabContents.appendChild(pane);
@@ -477,10 +478,15 @@ function renderShops(day, dayIso, allItems) {
       const exportTotalsLink = el('a', { href: `/admin/core/orders/export/totals/?order_for=${dayIso}`, text: 'Экспорт totals в Excel' });
       const printTotalsLink = el('a', { href: `/admin/core/orders/print/totals/?order_for=${dayIso}`, text: 'Печать', target: '_blank' });
 
+      const exportShopLink = el('a', { text: 'Экспорт в Excel', style: 'display:none;' });
+      const printShopLink = el('a', { text: 'Печать', target: '_blank', style: 'display:none;' });
+
       const tools = el('div', { class: 'day-tools' }, [
           modes,
           exportTotalsLink,
           printTotalsLink,
+          exportShopLink,
+          printShopLink,
       ]);
       details.appendChild(tools);
 
@@ -489,9 +495,9 @@ function renderShops(day, dayIso, allItems) {
       const totalsWrap = el('div', { id: totalsId });
       totalsWrap.appendChild(renderTotalsGrid(dayIso, day.totals || []));
       const shopsWrap = el('div', { id: shopsId, style: 'display:none;' });
-      shopsWrap.appendChild(renderShops(day, dayIso, day.totals || []));
+      shopsWrap.appendChild(renderShops(day, dayIso, day.totals || [], (shopId) => setMode('shops', shopId)));
 
-      function setMode(mode) {
+      function setMode(mode, shopId) {
         if (mode === 'totals') {
             btnTotals.classList.add('active');
             btnShops.classList.remove('active');
@@ -499,6 +505,8 @@ function renderShops(day, dayIso, allItems) {
             shopsWrap.style.display = 'none';
             exportTotalsLink.style.display = '';
             printTotalsLink.style.display = '';
+            exportShopLink.style.display = 'none';
+            printShopLink.style.display = 'none';
         } else {
             btnTotals.classList.remove('active');
             btnShops.classList.add('active');
@@ -506,11 +514,21 @@ function renderShops(day, dayIso, allItems) {
             shopsWrap.style.display = '';
             exportTotalsLink.style.display = 'none';
             printTotalsLink.style.display = 'none';
+            exportShopLink.style.display = '';
+            printShopLink.style.display = '';
+            if (shopId) {
+                exportShopLink.href = `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${shopId}`;
+                printShopLink.href = `/admin/core/orders/print/shop/?order_for=${dayIso}&shop_id=${shopId}`;
+            }
         }
     }
 
       btnTotals.addEventListener('click', () => setMode('totals'));
-      btnShops.addEventListener('click', () => setMode('shops'));
+      btnShops.addEventListener('click', () => {
+          const firstShopBtn = shopsWrap.querySelector('.mode-btn[data-shop-id]');
+          const firstShopId = firstShopBtn ? firstShopBtn.dataset.shopId : null;
+          setMode('shops', firstShopId);
+      });
 
       details.appendChild(totalsWrap);
       details.appendChild(shopsWrap);
