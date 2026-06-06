@@ -418,15 +418,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
         renderOrder(
-            JSON.parse('{{ cart|tojson }}'),
-            JSON.parse('{{ items|tojson }}'),
-            JSON.parse('{{ comments|default({}, true)|tojson }}'),
+            {{ cart|tojson }},
+            {{ items|tojson }},
+            {{ comments|default({}, true)|tojson }},
         );
-        applyCommentInputs(JSON.parse('{{ comments|default({}, true)|tojson }}'));
+            applyCommentInputs({{ comments|default({}, true)|tojson }});
     } catch (e) {
         console.warn('Initial render failed:', e);
     }
-});
 </script>
 
 {% endif %}
