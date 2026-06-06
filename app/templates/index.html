@@ -219,12 +219,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const dateError = document.getElementById('dateError');
     const orderForm = document.getElementById('orderForm');
 
-    const shopIdInput = document.querySelector('input[name="shop_id"][type="hidden"]')
-        || document.getElementById('shop_id');
-    const shopId = shopIdInput?.value || null;
+    function getShopId() {
+        return document.querySelector('input[name="shop_id"][type="hidden"]')?.value
+            || document.getElementById('shop_id')?.value
+            || null;
+    }
 
     // --- Shipment flags ---
     async function loadShipmentFlags() {
+        const shopId = getShopId();
         if (!shopId) return;
         const date = orderForInput.value || new Date().toISOString().split('T')[0];
         try {
@@ -240,6 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function saveShipmentFlag(flag, value) {
+        const shopId = getShopId();
         if (!shopId) return;
         const date = orderForInput.value || new Date().toISOString().split('T')[0];
         const fd = new FormData();
@@ -257,6 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('flag-s2').addEventListener('change', e => saveShipmentFlag('s2', e.target.checked));
     document.getElementById('flag-s3').addEventListener('change', e => saveShipmentFlag('s3', e.target.checked));
     orderForInput.addEventListener('change', loadShipmentFlags);
+    document.getElementById('shop_id').addEventListener('change', loadShipmentFlags);
     loadShipmentFlags();
 
     // --- Date validation ---
@@ -366,10 +371,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (itemId && comments[itemId] !== undefined) {
                 ta.value = comments[itemId];
             }
-        });
-        document.querySelectorAll('.item-order-type').forEach(cb => {
-            const itemId = cb.dataset.itemId;
-            // order types not stored in comments, leave as-is
         });
     }
 
