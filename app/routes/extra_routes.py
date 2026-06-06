@@ -15,6 +15,8 @@ from app.services.auth_service import AuthService
 from app.services.cart_service import CartService
 from app.services.index_service import IndexService
 from app.settings.config import templates
+from app.redis import redis as _redis
+
 
 router = APIRouter(tags=['auth', 'main'])
 
@@ -138,28 +140,24 @@ async def links_page(request: Request):
 
 @router.post('/set-shipment-flag')
 async def set_shipment_flag(
-    request: Request,
     shop_id: str = Form(...),
     date: str = Form(...),
-    flag: str = Form(...),  # 's2' or 's3'
+    flag: str = Form(...),
     value: bool = Form(...),
 ):
-    redis = request.app.state.redis
     key = f'shipment_flags:{shop_id}:{date}'
-    raw = await redis.get(key)
+    raw = await _redis.get(key)
     data = json.loads(raw) if raw else {'s2': False, 's3': False}
     data[flag] = value
-    await redis.setex(key, 43200, json.dumps(data))  # 12h TTL
+    await _redis.setex(key, 43200, json.dumps(data))
     return {'ok': True, 'data': data}
 
 @router.get('/get-shipment-flags')
 async def get_shipment_flags(
-    request: Request,
     shop_id: str,
     date: str,
 ):
-    redis = request.app.state.redis
     key = f'shipment_flags:{shop_id}:{date}'
-    raw = await redis.get(key)
+    raw = await _redis.get(key)
     data = json.loads(raw) if raw else {'s2': False, 's3': False}
     return data
