@@ -226,8 +226,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const dateError = document.getElementById('dateError');
     const orderForm = document.getElementById('orderForm');
 
-    const shopId = document.querySelector('input[name="shop_id"]')?.value 
-        || document.getElementById('shop_id')?.value;
+    const shopIdInput = document.querySelector('input[name="shop_id"][type="hidden"]') 
+        || document.getElementById('shop_id');
+    const shopId = shopIdInput?.value || null;
     const orderDate = orderForInput.value || new Date().toISOString().split('T')[0];
 
     async function loadShipmentFlags() {

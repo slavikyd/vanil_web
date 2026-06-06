@@ -153,7 +153,7 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
                 for shop in all_shops:
                     key = f'shipment_flags:{shop["id"]}:{d.isoformat()}'
                     raw = r.get(key)
-                    print(f'DEBUG shipment key={key} raw={raw}')
+                    logger.warning(f'DEBUG shipment key={key} raw={raw}')
                     if raw:
                         import json
                         shipment_flags[shop['id']] = json.loads(raw)
