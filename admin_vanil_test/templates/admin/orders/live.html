@@ -310,6 +310,17 @@ function renderShops(day, dayIso, allItems, onShopSelect) {
     const shopData = shopDataMap[shop.id] || null;
 
     pane.appendChild(renderShopSummary(dayIso, shopData, allItems));
+    const shopFlags = (day.shipment_flags || {})[shop.id] || { s2: false, s3: false };
+    const flagParts = [];
+    if (shopFlags.s2) flagParts.push('2ой рейс не нужен');
+    if (shopFlags.s3) flagParts.push('3ий рейс не нужен');
+
+    if (flagParts.length > 0) {
+        pane.appendChild(el('div', {
+            text: '⚠️ ' + flagParts.join(' | '),
+            style: 'margin: 6px 0 10px; font-size:13px; color:#dc3545; font-weight:bold;',
+        }));
+    }
 
     // pane.appendChild(el('a', {
     //   href: `/admin/core/orders/export/shop/?order_for=${dayIso}&shop_id=${shop.id}`,
@@ -501,6 +512,27 @@ function renderShops(day, dayIso, allItems, onShopSelect) {
       const shopsId = `shops-${dayIso}`;
       const totalsWrap = el('div', { id: totalsId });
       totalsWrap.appendChild(renderTotalsGrid(dayIso, day.totals || []));
+      const flagsTable = el('table', { class: 'lo-table', style: 'margin-top:12px; max-width:400px;' });
+      const flagsThead = el('thead');
+      const flagsTrh = el('tr');
+      ['Магазин', '2ой рейс не нужен', '3ий рейс не нужен'].forEach(h => flagsTrh.appendChild(el('th', { text: h })));
+      flagsThead.appendChild(flagsTrh);
+      flagsTable.appendChild(flagsThead);
+
+      const flagsTbody = el('tbody');
+      const allShops = window._allShops || [];
+      const shipmentFlags = day.shipment_flags || {};
+
+      for (const shop of allShops) {
+          const flags = shipmentFlags[shop.id] || { s2: false, s3: false };
+          const tr = el('tr');
+          tr.appendChild(el('td', { text: shop.address }));
+          tr.appendChild(el('td', { text: flags.s2 ? '✓' : '', style: 'text-align:center; color: #dc3545;' }));
+          tr.appendChild(el('td', { text: flags.s3 ? '✓' : '', style: 'text-align:center; color: #dc3545;' }));
+          flagsTbody.appendChild(tr);
+      }
+      flagsTable.appendChild(flagsTbody);
+      totalsWrap.appendChild(flagsTable);
       const shopsWrap = el('div', { id: shopsId, style: 'display:none;' });
       shopsWrap.appendChild(renderShops(day, dayIso, day.totals || [], (shopId) => setMode('shops', shopId)));
 

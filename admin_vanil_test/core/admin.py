@@ -147,13 +147,28 @@ def _orders_payload(*, max_days: int | None, offset_days: int) -> dict[str, Any]
             
             shops_payload.append({"shop_id": shop_key, "shop": shop_lookup.get(shop_key, shop_key), "orders": orders_payload})
 
-        days_payload.append({
-            "date": d.isoformat(),
-            "is_today": d == today,
-            "total_orders": len(day_orders),
-            "totals": totals_list,
-            "shops": shops_payload,
-        })
+            shipment_flags = {}
+            try:
+                r = get_redis()
+                for shop in all_shops:
+                    key = f'shipment_flags:{shop["id"]}:{d.isoformat()}'
+                    raw = r.get(key)
+                    if raw:
+                        import json
+                        shipment_flags[shop['id']] = json.loads(raw)
+                    else:
+                        shipment_flags[shop['id']] = {'s2': False, 's3': False}
+            except Exception:
+                pass
+
+            days_payload.append({
+                "date": d.isoformat(),
+                "is_today": d == today,
+                "total_orders": len(day_orders),
+                "totals": totals_list,
+                "shops": shops_payload,
+                "shipment_flags": shipment_flags,
+            })
 
     return {
         "generated_at": timezone.now().isoformat(),
