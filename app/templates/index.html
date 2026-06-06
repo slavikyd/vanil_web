@@ -79,7 +79,6 @@
     <p id="reg-hint" style="display:none; font-size: 12px; color: #999;">Код действителен 10 минут</p>
 </div>
 
-
 <div style="text-align: center; margin-top: 1em;">
     <a href="/static/app-debug.apk" download>Скачать приложение</a>
 </div>
@@ -120,8 +119,6 @@ async function registerDevice() {
 <input type="date" id="order_for" name="order_for" required>
 <br><br>
 
-<!-- <label for="store_name">Магазин (временно):</label><br>
-<input type="text" id="store_name" name="store_name" placeholder="Например, Магазин на Ленина"> -->
 <label for="shop_id">Магазин:</label><br>
 <select id="shop_id" name="shop_id" required {% if preselected_shop_id %}disabled{% endif %}>
     {% if not preselected_shop_id %}
@@ -136,9 +133,9 @@ async function registerDevice() {
 {% if preselected_shop_id %}
 <input type="hidden" name="shop_id" value="{{ preselected_shop_id }}">
 {% endif %}
+<br><br>
 <label for="shipment">Рейс:</label><br>
 <select id="shipment" name="shipment" required>
-    <br><br>
     <option value="" disabled selected>Выберите рейс</option>
     <option value="1">Рейс 1</option>
     <option value="2">Рейс 2</option>
@@ -207,15 +204,11 @@ async function registerDevice() {
     </form>
 </div>
 
-<!-- {% if is_admin %}
-<div style="margin-top: 3em; text-align: center;">
-    <a href="/admin/orders">Админ: Все заявки</a>
-    <a href="/admin/items">Админ: Товары</a>
-</div>
-{% endif %} -->
-
 </div>
 
+<script type="application/json" id="init-cart">{{ cart|tojson }}</script>
+<script type="application/json" id="init-items">{{ items|tojson }}</script>
+<script type="application/json" id="init-comments">{{ comments|default({})|tojson }}</script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const selectors = document.querySelectorAll('.quantity-selector');
@@ -226,19 +219,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const dateError = document.getElementById('dateError');
     const orderForm = document.getElementById('orderForm');
 
-    const shopIdInput = document.querySelector('input[name="shop_id"][type="hidden"]') 
+    const shopIdInput = document.querySelector('input[name="shop_id"][type="hidden"]')
         || document.getElementById('shop_id');
     const shopId = shopIdInput?.value || null;
-    const orderDate = orderForInput.value || new Date().toISOString().split('T')[0];
 
+    // --- Shipment flags ---
     async function loadShipmentFlags() {
         if (!shopId) return;
         const date = orderForInput.value || new Date().toISOString().split('T')[0];
-        const resp = await fetch(`/get-shipment-flags?shop_id=${shopId}&date=${date}`);
-        if (resp.ok) {
-            const data = await resp.json();
-            document.getElementById('flag-s2').checked = data.s2;
-            document.getElementById('flag-s3').checked = data.s3;
+        try {
+            const resp = await fetch(`/get-shipment-flags?shop_id=${shopId}&date=${date}`);
+            if (resp.ok) {
+                const data = await resp.json();
+                document.getElementById('flag-s2').checked = data.s2;
+                document.getElementById('flag-s3').checked = data.s3;
+            }
+        } catch (e) {
+            console.warn('loadShipmentFlags failed:', e);
         }
     }
 
@@ -250,7 +247,11 @@ document.addEventListener('DOMContentLoaded', () => {
         fd.append('date', date);
         fd.append('flag', flag);
         fd.append('value', value);
-        await fetch('/set-shipment-flag', { method: 'POST', body: fd });
+        try {
+            await fetch('/set-shipment-flag', { method: 'POST', body: fd });
+        } catch (e) {
+            console.warn('saveShipmentFlag failed:', e);
+        }
     }
 
     document.getElementById('flag-s2').addEventListener('change', e => saveShipmentFlag('s2', e.target.checked));
@@ -258,6 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
     orderForInput.addEventListener('change', loadShipmentFlags);
     loadShipmentFlags();
 
+    // --- Date validation ---
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const maxDate = new Date(today);
@@ -282,6 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dateError.textContent = '';
     });
 
+    // --- Cart ---
     window.sendUpdate = async (itemId, qty) => {
         const formData = new FormData();
         formData.append('itemid', itemId);
@@ -356,6 +359,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function applyCommentInputs(comments) {
+        comments = comments || {};
+        document.querySelectorAll('.item-comment-input').forEach(ta => {
+            const itemId = ta.dataset.itemId;
+            if (itemId && comments[itemId] !== undefined) {
+                ta.value = comments[itemId];
+            }
+        });
+        document.querySelectorAll('.item-order-type').forEach(cb => {
+            const itemId = cb.dataset.itemId;
+            // order types not stored in comments, leave as-is
+        });
+    }
+
     document.addEventListener('click', (e) => {
         const btn = e.target.closest('.item-comment-toggle');
         if (!btn) return;
@@ -417,15 +434,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     try {
-        renderOrder(
-            {{ cart|tojson }},
-            {{ items|tojson }},
-            {{ comments|default({}, true)|tojson }},
-        );
-            applyCommentInputs({{ comments|default({}, true)|tojson }});
+        const initCart = JSON.parse(document.getElementById('init-cart').textContent);
+        const initItems = JSON.parse(document.getElementById('init-items').textContent);
+        const initComments = JSON.parse(document.getElementById('init-comments').textContent);
+        renderOrder(initCart, initItems, initComments);
+        applyCommentInputs(initComments);
     } catch (e) {
         console.warn('Initial render failed:', e);
     }
+});
 </script>
 
 {% endif %}
