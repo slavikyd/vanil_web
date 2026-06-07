@@ -39,7 +39,7 @@ async def index(
         )
 
     session_id = get_or_create_session_id(request.session)
-
+    flash_error = request.session.pop('flash_error', None)
     if not shop_id and request.session.get('shop_id'):
         shop_id = uuid.UUID(request.session['shop_id'])
 
@@ -50,7 +50,7 @@ async def index(
         session_id=session_id,
         preselected_shop_id=shop_id,
     )
-    return templates.TemplateResponse('index.html', {'request': request, **ctx})
+    return templates.TemplateResponse('index.html', {'request': request, 'flash_error': flash_error, **ctx})
 
 
 @router.post('/login')

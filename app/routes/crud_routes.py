@@ -159,21 +159,22 @@ async def place_order(
     except EmptyCartError:
         logger.warning('order attempt with empty cart', extra={'cashier_id': cashier_id})
         orders_failed.labels(reason='empty_cart').inc()
-        return HTMLResponse('Cart is empty', status_code=status.HTTP_400_BAD_REQUEST)
+        request.session['flash_error'] = 'Корзина пуста'
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
     except InvalidOrderDateError:
         logger.exception('order creation failed: impossible date', extra={'cashier_id': cashier_id, 'date': order_for})
         orders_failed.labels(reason='invalid_date').inc()
-        return HTMLResponse('Invalid order date', status_code=status.HTTP_400_BAD_REQUEST)
+        request.session['flash_error'] = 'Неверная дата заказа'
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
     except ValueError as e:
         logger.warning('order creation failed: invalid shop', extra={'cashier_id': cashier_id, 'error': str(e)})
-        return HTMLResponse(str(e), status_code=status.HTTP_400_BAD_REQUEST)
-
+        request.session['flash_error'] = str(e)
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
     except Exception as e:
         logger.exception('order creation failed', extra={'cashier_id': cashier_id, 'error': str(e)})
         orders_failed.labels(reason='unknown').inc()
-        return HTMLResponse(
-            f'Failed to create order: {e}', status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        request.session['flash_error'] = f'Ошибка создания заказа: {e}'
+        return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
     logger.info('order placed successfully', extra={'cashier_id': cashier_id, 'order_for': order_for})
     orders_created.labels(cashier_id=cashier_id, shop_id=str(shop_id)).inc()
     order_size.observe(len(cart))

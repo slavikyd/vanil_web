@@ -447,5 +447,19 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 {% endif %}
+{% if flash_error %}
+<div id="toast" style="
+    position: fixed; bottom: 2em; left: 50%; transform: translateX(-50%);
+    background: #dc3545; color: #fff; padding: 12px 24px; border-radius: 8px;
+    font-size: 14px; z-index: 9999; box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+    animation: fadeout 0.5s ease 3.5s forwards;
+">{{ flash_error }}</div>
+<style>
+@keyframes fadeout { to { opacity: 0; pointer-events: none; } }
+</style>
+<script>
+setTimeout(() => { const t = document.getElementById('toast'); if(t) t.remove(); }, 4000);
+</script>
+{% endif %}
 </body>
 </html>
