@@ -178,14 +178,14 @@ async function registerDevice() {
 <ul class="items-list" style="padding-left: 0;"></ul>
 
 <div>
-<div id="shipment-flags" style="text-align: left; max-width: 420px; margin: 1.5em auto;">
+<!-- <div id="shipment-flags" style="text-align: left; max-width: 420px; margin: 1.5em auto;">
     <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer;">
         <input type="checkbox" id="flag-s2"> 2ой рейс не нужен
     </label>
     <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
         <input type="checkbox" id="flag-s3"> 3ий рейс не нужен
     </label>
-</div>
+</div> -->
 
 <!--THIS IS CODE FOR THE COMMENT FIELD, DON'T FORGET ABOUT IT SLAVA, PLEASE-->
 <label for="order_comment">Комментарий к заказу:</label><br>
@@ -203,7 +203,16 @@ async function registerDevice() {
         <button type="submit">Выйти</button>
     </form>
 </div>
-
+<div id="shipment-flags-block" style="margin-top: 2em; max-width: 420px; margin: 2em auto 0; text-align: center;">
+    <h2>Статус рейсов на сегодня</h2>
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer; justify-content:center;">
+        <input type="checkbox" id="flag-s2"> 2ой рейс не нужен
+    </label>
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; cursor:pointer; justify-content:center;">
+        <input type="checkbox" id="flag-s3"> 3ий рейс не нужен
+    </label>
+    <button type="button" id="btn-save-shipment-flags">Сохранить статус рейсов на сегодня</button>
+</div>
 </div>
 
 <script type="application/json" id="init-cart">{{ cart|tojson }}</script>
@@ -258,8 +267,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    document.getElementById('flag-s2').addEventListener('change', e => saveShipmentFlag('s2', e.target.checked));
-    document.getElementById('flag-s3').addEventListener('change', e => saveShipmentFlag('s3', e.target.checked));
+    document.getElementById('btn-save-shipment-flags').addEventListener('click', async () => {
+        await saveShipmentFlag('s2', document.getElementById('flag-s2').checked);
+        await saveShipmentFlag('s3', document.getElementById('flag-s3').checked);
+    });
     orderForInput.addEventListener('change', loadShipmentFlags);
     document.getElementById('shop_id').addEventListener('change', loadShipmentFlags);
     loadShipmentFlags();
