@@ -35,7 +35,7 @@ async def index(
     if not cashier_id:
         return templates.TemplateResponse(
             'index.html',
-            {'request': request, 'cashier_id': None},
+            {'request': request, 'flash_error': flash_error, 'cashier_id': None},
         )
 
     session_id = get_or_create_session_id(request.session)
