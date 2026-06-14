@@ -16,7 +16,9 @@ from app.services.cart_service import CartService
 from app.services.index_service import IndexService
 from app.settings.config import templates
 from app.redis import redis as _redis
+import logging
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=['auth', 'main'])
 
@@ -28,6 +30,7 @@ async def index(
     cart_repo: RedisCartRepo = Depends(get_cart_repo),
     shop_id: uuid.UUID | None = None,
 ):
+    flash_error = request.session.pop('flash_error', None)
     if shop_id:
         request.session['shop_id'] = str(shop_id)
 
@@ -39,7 +42,7 @@ async def index(
         )
 
     session_id = get_or_create_session_id(request.session)
-    flash_error = request.session.pop('flash_error', None)
+    
     if not shop_id and request.session.get('shop_id'):
         shop_id = uuid.UUID(request.session['shop_id'])
 
@@ -140,16 +143,28 @@ async def links_page(request: Request):
 
 @router.post('/set-shipment-flag')
 async def set_shipment_flag(
+    request: Request,
     shop_id: str = Form(...),
     date: str = Form(...),
     flag: str = Form(...),
     value: bool = Form(...),
 ):
+    cashier_id = request.session.get('cashier_id', 'unknown')
     key = f'shipment_flags:{shop_id}:{date}'
     raw = await _redis.get(key)
     data = json.loads(raw) if raw else {'s2': False, 's3': False}
     data[flag] = value
     await _redis.setex(key, 43200, json.dumps(data))
+    logger.info(
+        'shipment_flag_set',
+        extra={
+            'shop_id': shop_id,
+            'date': date,
+            'flag': flag,
+            'value': value,
+            'cashier_id': cashier_id,
+        }
+    )
     return {'ok': True, 'data': data}
 
 @router.get('/get-shipment-flags')
