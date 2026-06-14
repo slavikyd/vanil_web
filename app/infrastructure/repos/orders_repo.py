@@ -169,35 +169,63 @@ class OrdersRepo:
             for r in rows
         ]
 
-    async def cashier_rows(self, *, cashier_id: str, date_filter: Literal['today', 'past', 'future']) -> list[dict]:
+    async def cashier_rows(
+        self,
+        *,
+        cashier_id: str,
+        date_filter: Literal['today', 'past', 'future'],
+        filter_date: str | None = None,
+        shop_id: str | None = None,
+    ) -> list[dict]:
 
         today = date.today()
+        args: list[object] = []
+        conditions = []
 
-        conditions = {
-            'today': 'o.order_for = $2',
-            'past': 'o.order_for < $2',
-            'future': 'o.order_for > $2',
-        }
+        # shop or cashier filter
+        if shop_id:
+            conditions.append(f'o.shop_id = $1')
+            args.append(uuid.UUID(shop_id))
+        else:
+            conditions.append(f'o.cashier_id = $1')
+            args.append(cashier_id)
+
+        # date range filter
+        if filter_date:
+            parsed = date.fromisoformat(filter_date)
+            conditions.append(f'o.order_for = ${len(args)+1}')
+            args.append(parsed)
+        else:
+            date_conditions = {
+                'today': '=',
+                'past': '<',
+                'future': '>',
+            }
+            op = date_conditions[date_filter]
+            conditions.append(f'o.order_for {op} ${len(args)+1}')
+            args.append(today)
+
+        where = ' AND '.join(conditions)
 
         rows = await self._conn.fetch(
             f"""
-                SELECT
+            SELECT
                 o.id AS order_id,
                 o.order_for,
                 o.created,
                 o.address,
+                o.shipment,
                 c.full_name AS cashier_name,
                 oi.quantity,
                 i.name AS item_name
-                FROM orders o
-                JOIN cashiers c ON o.cashier_id = c.id
-                JOIN orders_items oi ON oi.order_id = o.id
-                JOIN items i ON oi.item_id = i.id
-                WHERE o.cashier_id = $1 AND {conditions[date_filter]}
-                ORDER BY o.order_for DESC, o.created DESC
+            FROM orders o
+            JOIN cashiers c ON o.cashier_id = c.id
+            JOIN orders_items oi ON oi.order_id = o.id
+            JOIN items i ON oi.item_id = i.id
+            WHERE {where}
+            ORDER BY o.order_for DESC, o.created DESC
             """,
-            cashier_id,
-            today,
+            *args,
         )
         return [
             {
@@ -205,6 +233,7 @@ class OrdersRepo:
                 'order_for': r['order_for'],
                 'created': r['created'],
                 'address': r['address'],
+                'shipment': r['shipment'],
                 'item_name': r['item_name'],
                 'quantity': int(r['quantity']),
                 'cashier_name': r['cashier_name'],

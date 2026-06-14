@@ -32,6 +32,7 @@ def group_orders_by_day(rows: list[dict]) -> dict[str, list[dict]]:
                 'created': r['created'],
                 'address': r['address'],
                 'cashier_name': r['cashier_name'],
+                'shipment': r['shipment'],
                 'items': [],
             }
             day_bucket.append(order)
@@ -210,19 +211,36 @@ async def orders_view(
 async def orders_archive_view(
     request: Request,
     uow: AsyncpgUnitOfWork = Depends(get_uow),
+    filter_date: str | None = None,
+    shop_view: bool = False,
 ):
     cashier_id = request.session.get('cashier_id')
     if not cashier_id:
         return RedirectResponse('/', status_code=status.HTTP_302_FOUND)
 
+    shop_id = request.session.get('shop_id')
+
     assert uow.orders is not None
-    rows = await uow.orders.cashier_rows(cashier_id=cashier_id, date_filter='past')
-    grouped = group_orders_by_day(rows)
     assert uow.cashiers is not None
+
+    rows = await uow.orders.cashier_rows(
+        cashier_id=cashier_id,
+        date_filter='past',
+        filter_date=filter_date,
+        shop_id=shop_id if shop_view else None,
+    )
+    grouped = group_orders_by_day(rows)
     cashier_name = await uow.cashiers.get_full_name(cashier_id=cashier_id)
     return templates.TemplateResponse(
         'orders_archive.html',
-        {'request': request, 'archive_orders': grouped, 'cashier_name': cashier_name or cashier_id,},
+        {
+            'request': request,
+            'archive_orders': grouped,
+            'cashier_name': cashier_name or cashier_id,
+            'filter_date': filter_date,
+            'shop_view': shop_view,
+            'has_shop': bool(shop_id),
+        },
     )
 
 @router.get('/orders/future', response_class=HTMLResponse)

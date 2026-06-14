@@ -3,18 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Архив моих заявок</title>
+    <title>Архив заявок</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
         body { font-family: Arial, Helvetica, sans-serif; padding: 10px; font-size: 18px; }
         h1 { font-size: 32px; margin-bottom: 10px; }
-        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
         .button { font-size: 18px; padding: 10px 14px; border-radius: 8px; }
         .card { padding: 12px; border-radius: 10px; margin-bottom: 10px; }
         .meta { font-size: 17px; line-height: 1.35; }
         .items-list { font-size: 17px; line-height: 1.35; }
         details { margin-bottom: 12px; }
         summary { cursor: pointer; font-weight: 700; font-size: 22px; }
+        .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+        .filters label { font-size: 16px; }
+        .filters input[type="date"] { font-size: 16px; padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; }
+        .tab-btn { font-size: 16px; padding: 8px 16px; border-radius: 6px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; text-decoration: none; color: #222; }
+        .tab-btn.active { background: #333; color: #fff; border-color: #333; }
+        .shipment-badge { display: inline-block; font-size: 13px; background: #e9ecef; border-radius: 4px; padding: 2px 8px; margin-left: 6px; }
         @media (max-width: 600px) {
             body { font-size: 19px; }
             h1 { font-size: 34px; }
@@ -25,21 +31,41 @@
     </style>
 </head>
 <body>
-    <h1>Архив моих заявок</h1>
+    <h1>Архив заявок</h1>
     <div class="actions">
         <a class="button" href="/orders">← Сегодняшние заявки</a>
         <a class="button" href="/">На главную</a>
     </div>
 
+    <!-- View toggle -->
+    <div class="filters">
+        <a href="/orders/archive?shop_view=false{% if filter_date %}&filter_date={{ filter_date }}{% endif %}"
+           class="tab-btn {% if not shop_view %}active{% endif %}">Мои заявки</a>
+        {% if has_shop %}
+        <a href="/orders/archive?shop_view=true{% if filter_date %}&filter_date={{ filter_date }}{% endif %}"
+           class="tab-btn {% if shop_view %}active{% endif %}">Все заявки магазина</a>
+        {% endif %}
+    </div>
+
+    <!-- Date filter -->
+    <div class="filters">
+        <label for="filter_date">Фильтр по дате:</label>
+        <input type="date" id="filter_date_input" value="{{ filter_date or '' }}">
+        <button class="tab-btn" onclick="applyDateFilter()">Применить</button>
+        {% if filter_date %}
+        <a href="/orders/archive?shop_view={{ 'true' if shop_view else 'false' }}" class="tab-btn">Сбросить</a>
+        {% endif %}
+    </div>
+
     {% if archive_orders %}
         {% for order_date, orders in archive_orders.items() %}
-        <details>
+        <details open>
             <summary>{{ order_date }}</summary>
             <div class="grid" style="margin-top: 0.75rem;">
                 {% for order in orders %}
                 <div class="card">
                     <div class="meta">
-                        <div><strong>Создано:</strong> {{ order["created"] }}</div>
+                        <div><strong>Создано:</strong> {{ order["created"] }} <span class="shipment-badge">Рейс {{ order["shipment"] }}</span></div>
                         <div><strong>Кассир:</strong> {{ order["cashier_name"] }}</div>
                         <div><strong>Адрес:</strong> {{ order["address"] }}</div>
                     </div>
@@ -61,5 +87,15 @@
     {% else %}
         <p>Архив пуст.</p>
     {% endif %}
+
+<script>
+function applyDateFilter() {
+    const d = document.getElementById('filter_date_input').value;
+    const shopView = {{ 'true' if shop_view else 'false' }};
+    let url = '/orders/archive?shop_view=' + shopView;
+    if (d) url += '&filter_date=' + d;
+    window.location.href = url;
+}
+</script>
 </body>
 </html>
