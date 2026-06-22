@@ -5,12 +5,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from app.db import connect_db
 from app.logging import setup_logging
 from app.middleware.cashier_session import CashierSessionTimeoutMiddleware
 from app.redis import redis
 from app.routes import crud_routes, extra_routes
+from app.services.cart_finalizer import finalize_abandoned_carts
 from prometheus_fastapi_instrumentator import Instrumentator
 import mimetypes
 
@@ -31,6 +34,7 @@ app.add_middleware(
         'http://localhost:3000',
         'http://127.0.0.1:3000',
         'http://xn--90aioe3a8b4a.xn--p1ai',
+        'http://mz.vanil-krd.ru',
     ],
     allow_credentials=True,
     allow_methods=['*'],
@@ -44,6 +48,8 @@ app.add_middleware(
     max_age=SESSION_MAX_AGE_SECONDS,
 )
 
+scheduler = AsyncIOScheduler()
+
 
 @app.on_event('startup')
 async def startup():
@@ -51,10 +57,26 @@ async def startup():
     app.state.db = await connect_db()
     app.state.cart = {'items': {}}
 
+    scheduler.add_job(
+        finalize_abandoned_carts,
+        trigger=CronTrigger(hour=21, minute=0),
+        args=[app.state.db],
+        id='finalize_abandoned_carts',
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info('scheduler_started', extra={'jobs': [j.id for j in scheduler.get_jobs()]})
+
 
 @app.on_event('shutdown')
 async def shutdown():
     logger.info('Shutting down application...')
+
+    try:
+        scheduler.shutdown(wait=False)
+        logger.info('Scheduler shut down')
+    except Exception as e:
+        logger.warning(f'Error shutting down scheduler: {e}')
 
     try:
         await redis.close()

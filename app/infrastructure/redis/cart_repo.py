@@ -85,3 +85,34 @@ class RedisCartRepo:
 
         except Exception as e:
             logger.warning('failed to clear cart', extra={'session_id': session_id, 'error': str(e)})
+
+    def _meta_key(self, session_id: str) -> str:
+        return f'cart_meta:{session_id}'
+
+    async def set_meta(self, *, session_id: str, shop_id: str | None, cashier_id: str | None) -> None:
+        key = self._meta_key(session_id)
+        try:
+            if shop_id:
+                await redis.hset(key, 'shop_id', shop_id)
+            if cashier_id:
+                await redis.hset(key, 'cashier_id', cashier_id)
+            await redis.expire(key, CART_TTL_SECONDS)
+        except Exception as e:
+            logger.warning(f'Failed to set cart meta in Redis: {e}')
+
+    async def get_meta(self, *, session_id: str) -> dict[str, str]:
+        try:
+            raw = await redis.hgetall(self._meta_key(session_id))
+            return {k: str(v) for k, v in raw.items()}
+        except Exception as e:
+            logger.warning('failed to read cart meta', extra={'session_id': session_id, 'error': str(e)})
+            return {}
+
+    async def list_all_cart_session_ids(self) -> list[str]:
+        keys = []
+        try:
+            async for key in redis.scan_iter(match='cart:*'):
+                keys.append(key.replace('cart:', '', 1))
+        except Exception as e:
+            logger.warning(f'Failed to scan cart keys: {e}')
+        return keys

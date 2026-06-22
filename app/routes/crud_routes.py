@@ -60,6 +60,13 @@ async def add_to_cart(
         item_id=itemid,
         quantity=quantity,
     )
+
+    await cart_repo.set_meta(
+        session_id=session_id,
+        shop_id=session.get('shop_id'),
+        cashier_id=session.get('cashier_id'),
+    )
+
     logger.debug('cart item updated', extra={'session_id': session_id, 'item_id': itemid, 'quantity': quantity}) # TODO: possibly remove this debugging log message
     cart_items_added.inc()
     cart = await CartService.get_cart(cart_repo=cart_repo, session_id=session_id)

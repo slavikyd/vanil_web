@@ -29,6 +29,7 @@ httpx = "^0.28.1"
 python-json-logger = "^4.0.0"
 prometheus-fastapi-instrumentator = "^7.1.0"
 django = "^6.0.5"
+apscheduler = "^3.11.2"
 
 [tool.poetry.group.dev.dependencies]
 yoyo-migrations = "^9.0.0"
