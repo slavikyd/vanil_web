@@ -1,4 +1,4 @@
-# TODO: ref and rewrite
+#!/usr/bin/env python3
 """
 Load fiscal receipts from the Astral OFD API into PostgreSQL.
 
@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import socket
 import sys
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -43,19 +44,19 @@ class Config:
 
         self.api_key: str = self._req("OFD_API_KEY")
         self.organization_id: str = self._req("OFD_ORGANIZATION_ID")
-        self.database_url: str = self._req("DB_URL_MIGRATIONS")
+        self.db = self._db_config()
 
         self.base_url: str = os.getenv(
             "OFD_BASE_URL",
             "https://ofd.astralnalog.ru/api/v4.2/documents.tickets",
         )
-        self.page_size: int = int(os.getenv("OFD_PAGE_SIZE", "10000"))
+        self.page_size: int = int(os.getenv("OFD_PAGE_SIZE", "1000"))
         self.first_page: int = int(os.getenv("OFD_FIRST_PAGE", "1"))
         self.concurrency: int = int(os.getenv("OFD_CONCURRENCY", "4"))
         self.request_timeout: int = int(os.getenv("OFD_REQUEST_TIMEOUT", "120"))
         self.max_retries: int = int(os.getenv("OFD_MAX_RETRIES", "5"))
 
-        self.tz = ZoneInfo(os.getenv("OFD_TIMEZONE", "Europe/Moscow"))
+        self.tz = ZoneInfo(os.getenv("OFD_TIMEZONE", "Europe/Saratov"))
         # Astral encodes local wall-clock time as a unix timestamp. Set this to
         # false only if you confirm the timestamps are genuine UTC instants.
         self.time_is_local: bool = _envbool("OFD_TIME_IS_LOCAL", True)
@@ -68,6 +69,71 @@ class Config:
         if not value:
             sys.exit(f"Missing required environment variable {name}. See .env.example")
         return value
+
+    @staticmethod
+    def _db_config() -> dict[str, Any]:
+        """
+        Build asyncpg connect kwargs.
+
+        Discrete DB_* variables win over DATABASE_URL, because asyncpg splits a
+        DSN at the FIRST '@'. A password containing '@' silently corrupts the
+        hostname (postgres:p@ss@host -> host 'ss@host'), which surfaces much
+        later as a confusing DNS failure. Discrete variables need no escaping.
+        """
+        host = os.getenv("DB_HOST")
+        if host:
+            return {
+                "host": host,
+                "port": int(os.getenv("DB_PORT", "5432")),
+                "user": Config._req("DB_USER"),
+                "password": os.getenv("DB_PASSWORD") or None,
+                "database": Config._req("DB_NAME"),
+                "ssl": os.getenv("DB_SSLMODE") or None,
+            }
+
+        dsn = os.getenv("DATABASE_URL")
+        if not dsn:
+            sys.exit(
+                "Set DB_HOST/DB_USER/DB_NAME (recommended) or DATABASE_URL. "
+                "See .env.example"
+            )
+        return {"dsn": dsn}
+
+    def db_target(self) -> str:
+        """
+        Describe the connection target for logs, without the password.
+
+        For a DSN this deliberately splits at the FIRST '@', the way asyncpg
+        does, so the logged host is the host asyncpg will really dial rather
+        than the one urlparse would guess.
+        """
+        if "dsn" in self.db:
+            rest = re.sub(r"^\w+://", "", self.db["dsn"])
+            userinfo, _, hostpart = rest.partition("@")
+            if not hostpart:                       # no credentials in the DSN
+                userinfo, hostpart = "", rest
+            user = userinfo.split(":", 1)[0] or "(default)"
+            hostport, _, database = hostpart.partition("/")
+            database = database.split("?", 1)[0]
+            host, _, port = hostport.partition(":")
+            return f"{user}@{host}:{port or 5432}/{database}"
+
+        return (f"{self.db['user']}@{self.db['host']}:"
+                f"{self.db['port']}/{self.db['database']}")
+
+    def warn_on_dsn_password(self) -> None:
+        """Flag a DSN whose password almost certainly breaks host parsing."""
+        if "dsn" not in self.db:
+            return
+        rest = re.sub(r"^\w+://", "", self.db["dsn"])
+        userinfo, _, hostpart = rest.partition("@")
+        if "@" in hostpart and ":" in userinfo:
+            log.warning(
+                "DATABASE_URL contains more than one '@'. asyncpg splits at the "
+                "first one, so part of your password is being read as the "
+                "hostname. Use DB_HOST/DB_USER/DB_PASSWORD/DB_NAME, or "
+                "percent-encode '@' as %40."
+            )
 
 
 def _envbool(name: str, default: bool) -> bool:
@@ -509,8 +575,35 @@ async def done_pages(pool: asyncpg.Pool, cfg: Config) -> set[int]:
     return {r["page_number"] for r in rows}
 
 
+async def open_pool(cfg: Config) -> asyncpg.Pool:
+    """Connect, turning the usual failures into an actionable message."""
+    cfg.warn_on_dsn_password()
+    target = cfg.db_target()
+    log.info("Connecting to postgres %s", target)
+    try:
+        return await asyncpg.create_pool(min_size=1, max_size=4, **cfg.db)
+    except socket.gaierror as exc:
+        host = target.split("@", 1)[1].split(":", 1)[0]
+        sys.exit(
+            f"Cannot resolve database host {host!r} ({exc}).\n"
+            "  - If your password contains '@', asyncpg splits the DSN at the\n"
+            "    FIRST '@' and treats the rest as the hostname. Use the\n"
+            "    DB_HOST/DB_USER/DB_PASSWORD/DB_NAME variables instead of\n"
+            "    DATABASE_URL, or percent-encode the password (@ -> %40).\n"
+            f"  - If {host!r} is a Docker service name, run inside the same\n"
+            "    compose network or point DB_HOST at the published address.\n"
+            "  - Otherwise check DNS: getent hosts " + host
+        )
+    except OSError as exc:
+        sys.exit(f"Cannot reach database at {target}: {exc}")
+    except asyncpg.InvalidPasswordError:
+        sys.exit(f"Password rejected for {target}")
+    except asyncpg.InvalidCatalogNameError:
+        sys.exit(f"Database does not exist: {target}")
+
+
 async def run(args: argparse.Namespace, cfg: Config) -> None:
-    pool = await asyncpg.create_pool(cfg.database_url, min_size=1, max_size=4)
+    pool = await open_pool(cfg)
     try:
         if args.init_schema:
             ddl = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
