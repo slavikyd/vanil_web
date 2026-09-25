@@ -466,8 +466,11 @@ class Writer:
                             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
                             $14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22::jsonb,$23,$24::jsonb
                         )
-                        ON CONFLICT (fiscal_drive_number, shift_number, check_number)
-                            DO NOTHING
+                        -- No target: the table has two independent unique keys
+                        -- (fns_id; fiscal_drive_number+shift_number+check_number).
+                        -- Since pages can drift and repeat a receipt across two
+                        -- fetches, either one can be the arbiter that fires.
+                        ON CONFLICT DO NOTHING
                         RETURNING id
                         """,
                         row["fns_id"], row["kkt_reg_id"], row["fiscal_drive_number"],
