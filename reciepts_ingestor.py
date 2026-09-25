@@ -2,13 +2,15 @@
 """
 Load fiscal receipts from the Astral OFD API into PostgreSQL.
 
-    python ofd_loader.py --init-schema      # create schema ofd (once)
-    python ofd_loader.py                    # load everything
-    python ofd_loader.py --from-page 120 --to-page 200
-    python ofd_loader.py --resume           # skip pages already in ofd.load_log
+    python reciepts_ingestor.py all                    # full backfill / reconciliation
+    python reciepts_ingestor.py all --from-page 120 --to-page 200
+    python reciepts_ingestor.py recent                  # only the newest unseen receipts
+    python reciepts_ingestor.py serve                    # scheduler: `recent` every 30 min
+                                                           # (window configurable), nightly `all`
 
-Every write is idempotent, so re-running the same pages is safe and cheap.
-All credentials live in .env; nothing sensitive is hard-coded here.
+Every write is idempotent (ON CONFLICT DO NOTHING keyed on the receipt's
+fiscal identity), so re-running any mode for any page range is always safe.
+All configuration lives in .env; nothing sensitive is hard-coded here.
 """
 
 from __future__ import annotations
@@ -19,17 +21,22 @@ import json
 import logging
 import os
 import re
-import socket
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
-from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
-import aiohttp
 import asyncpg
+import httpx
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
+
+load_dotenv()
+
+from app.logging import setup_logging  # noqa: E402  (must follow load_dotenv)
 
 log = logging.getLogger("ofd")
 
@@ -40,18 +47,26 @@ log = logging.getLogger("ofd")
 
 class Config:
     def __init__(self) -> None:
-        load_dotenv()
-
         self.api_key: str = self._req("OFD_API_KEY")
         self.organization_id: str = self._req("OFD_ORGANIZATION_ID")
-        self.db = self._db_config()
+
+        self.db_kwargs: dict[str, Any] = {
+            "user": self._req("DB_USER"),
+            "password": os.getenv("DB_PASS") or None,
+            "database": self._req("DB_NAME"),
+            "host": self._req("DB_HOST"),
+            "port": int(os.getenv("DB_PORT", "5432")),
+        }
 
         self.base_url: str = os.getenv(
             "OFD_BASE_URL",
             "https://ofd.astralnalog.ru/api/v4.2/documents.tickets",
         )
         self.page_size: int = int(os.getenv("OFD_PAGE_SIZE", "1000"))
-        self.first_page: int = int(os.getenv("OFD_FIRST_PAGE", "1"))
+        self.recent_page_size: int = int(os.getenv("OFD_RECENT_PAGE_SIZE", "200"))
+        self.recent_stop_empty_pages: int = int(
+            os.getenv("OFD_RECENT_STOP_EMPTY_PAGES", "2")
+        )
         self.concurrency: int = int(os.getenv("OFD_CONCURRENCY", "4"))
         self.request_timeout: int = int(os.getenv("OFD_REQUEST_TIMEOUT", "120"))
         self.max_retries: int = int(os.getenv("OFD_MAX_RETRIES", "5"))
@@ -61,6 +76,19 @@ class Config:
         # false only if you confirm the timestamps are genuine UTC instants.
         self.time_is_local: bool = _envbool("OFD_TIME_IS_LOCAL", True)
 
+        # `serve` schedule: `recent` runs every OFD_SCHEDULE_INTERVAL_MINUTES,
+        # between OFD_SCHEDULE_HOUR_START and OFD_SCHEDULE_HOUR_END (inclusive).
+        # `all` runs once nightly at OFD_NIGHTLY_RECONCILE_HOUR as a safety net
+        # for anything `recent` missed.
+        self.schedule_hour_start: int = int(os.getenv("OFD_SCHEDULE_HOUR_START", "7"))
+        self.schedule_hour_end: int = int(os.getenv("OFD_SCHEDULE_HOUR_END", "23"))
+        self.schedule_interval_minutes: int = int(
+            os.getenv("OFD_SCHEDULE_INTERVAL_MINUTES", "30")
+        )
+        self.nightly_reconcile_hour: int = int(
+            os.getenv("OFD_NIGHTLY_RECONCILE_HOUR", "3")
+        )
+
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
     @staticmethod
@@ -69,71 +97,6 @@ class Config:
         if not value:
             sys.exit(f"Missing required environment variable {name}. See .env.example")
         return value
-
-    @staticmethod
-    def _db_config() -> dict[str, Any]:
-        """
-        Build asyncpg connect kwargs.
-
-        Discrete DB_* variables win over DATABASE_URL, because asyncpg splits a
-        DSN at the FIRST '@'. A password containing '@' silently corrupts the
-        hostname (postgres:p@ss@host -> host 'ss@host'), which surfaces much
-        later as a confusing DNS failure. Discrete variables need no escaping.
-        """
-        host = os.getenv("DB_HOST")
-        if host:
-            return {
-                "host": host,
-                "port": int(os.getenv("DB_PORT", "5432")),
-                "user": Config._req("DB_USER"),
-                "password": os.getenv("DB_PASSWORD") or None,
-                "database": Config._req("DB_NAME"),
-                "ssl": os.getenv("DB_SSLMODE") or None,
-            }
-
-        dsn = os.getenv("DATABASE_URL")
-        if not dsn:
-            sys.exit(
-                "Set DB_HOST/DB_USER/DB_NAME (recommended) or DATABASE_URL. "
-                "See .env.example"
-            )
-        return {"dsn": dsn}
-
-    def db_target(self) -> str:
-        """
-        Describe the connection target for logs, without the password.
-
-        For a DSN this deliberately splits at the FIRST '@', the way asyncpg
-        does, so the logged host is the host asyncpg will really dial rather
-        than the one urlparse would guess.
-        """
-        if "dsn" in self.db:
-            rest = re.sub(r"^\w+://", "", self.db["dsn"])
-            userinfo, _, hostpart = rest.partition("@")
-            if not hostpart:                       # no credentials in the DSN
-                userinfo, hostpart = "", rest
-            user = userinfo.split(":", 1)[0] or "(default)"
-            hostport, _, database = hostpart.partition("/")
-            database = database.split("?", 1)[0]
-            host, _, port = hostport.partition(":")
-            return f"{user}@{host}:{port or 5432}/{database}"
-
-        return (f"{self.db['user']}@{self.db['host']}:"
-                f"{self.db['port']}/{self.db['database']}")
-
-    def warn_on_dsn_password(self) -> None:
-        """Flag a DSN whose password almost certainly breaks host parsing."""
-        if "dsn" not in self.db:
-            return
-        rest = re.sub(r"^\w+://", "", self.db["dsn"])
-        userinfo, _, hostpart = rest.partition("@")
-        if "@" in hostpart and ":" in userinfo:
-            log.warning(
-                "DATABASE_URL contains more than one '@'. asyncpg splits at the "
-                "first one, so part of your password is being read as the "
-                "hostname. Use DB_HOST/DB_USER/DB_PASSWORD/DB_NAME, or "
-                "percent-encode '@' as %40."
-            )
 
 
 def _envbool(name: str, default: bool) -> bool:
@@ -156,7 +119,7 @@ CATEGORY_RULES: list[tuple[str, str, str]] = [
     (r"печенье|гата|трубочк|орешки|ванильное яблоко|восточная сладость",
                                                  "cookie",    "cookie"),
     (r"торт",                                    "cake",      "cake"),
-    (r"рулет",                                   "cake",      "roll"),
+    (r"рулет",                                    "cake",      "roll"),
     (r"чизкейк",                                 "pastry",    "cheesecake"),
     (r"трайфл",                                  "pastry",    "trifle"),
     (r"корпусный десерт",                        "pastry",    "mousse_dessert"),
@@ -335,19 +298,22 @@ def normalize(doc: dict[str, Any], cfg: Config) -> dict[str, Any] | None:
 # API client
 # ---------------------------------------------------------------------------
 
+RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+
+
 class OfdClient:
-    def __init__(self, cfg: Config, session: aiohttp.ClientSession) -> None:
+    def __init__(self, cfg: Config, client: httpx.AsyncClient) -> None:
         self.cfg = cfg
-        self.session = session
+        self.client = client
         self._gate = asyncio.Semaphore(cfg.concurrency)
 
-    async def fetch_page(self, page_number: int) -> tuple[int, list[dict[str, Any]]]:
+    async def fetch_page(self, page_number: int, page_size: int) -> tuple[int, list[dict[str, Any]]]:
         """Return (totalCount, documents) for one page, with retry/backoff."""
         params = {
             "api_key": self.cfg.api_key,
             "organizationId": self.cfg.organization_id,
             "pageNumber": page_number,
-            "count": self.cfg.page_size,
+            "count": page_size,
         }
 
         delay = 2.0
@@ -356,14 +322,15 @@ class OfdClient:
         for attempt in range(1, self.cfg.max_retries + 1):
             try:
                 async with self._gate:
-                    async with self.session.get(self.cfg.base_url, params=params) as resp:
-                        if resp.status in (429, 500, 502, 503, 504):
-                            raise aiohttp.ClientResponseError(
-                                resp.request_info, resp.history,
-                                status=resp.status, message=await resp.text(),
-                            )
-                        resp.raise_for_status()
-                        payload = await resp.json()
+                    resp = await self.client.get(self.cfg.base_url, params=params)
+
+                if resp.status_code in RETRYABLE_STATUSES:
+                    raise httpx.HTTPStatusError(
+                        f"status {resp.status_code}: {resp.text}",
+                        request=resp.request, response=resp,
+                    )
+                resp.raise_for_status()
+                payload = resp.json()
 
                 if not payload.get("ok", True):
                     raise RuntimeError(f"API returned ok=false: {payload}")
@@ -371,7 +338,7 @@ class OfdClient:
                 result = payload.get("result") or {}
                 return int(result.get("totalCount") or 0), list(result.get("documents") or [])
 
-            except (aiohttp.ClientError, asyncio.TimeoutError, RuntimeError) as exc:
+            except (httpx.HTTPError, RuntimeError) as exc:
                 last_error = exc
                 if attempt == self.cfg.max_retries:
                     break
@@ -540,189 +507,288 @@ class Writer:
                         item_rows,
                     )
 
-                await conn.execute(
-                    """
-                    INSERT INTO ofd.load_log
-                        (organization_id, page_number, page_size,
-                         documents_seen, receipts_new)
-                    VALUES ($1,$2,$3,$4,$5)
-                    ON CONFLICT (organization_id, page_number, page_size) DO UPDATE
-                        SET documents_seen = EXCLUDED.documents_seen,
-                            receipts_new   = ofd.load_log.receipts_new
-                                             + EXCLUDED.receipts_new,
-                            fetched_at     = now()
-                    """,
-                    self.cfg.organization_id, page_number,
-                    self.cfg.page_size, len(docs), inserted,
-                )
-
         return inserted
+
+
+# ---------------------------------------------------------------------------
+# Ingestion runs (observability only — never used to skip work)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RunStats:
+    pages_walked: int = 0
+    documents_seen: int = 0
+    receipts_new: int = 0
+
+
+async def record_run(
+    pool: asyncpg.Pool, mode: str, started_at: datetime, stats: RunStats,
+    error: str | None = None,
+) -> None:
+    await pool.execute(
+        """
+        INSERT INTO ofd.ingest_runs
+            (mode, started_at, finished_at, pages_walked, documents_seen, receipts_new, error)
+        VALUES ($1, $2, now(), $3, $4, $5, $6)
+        """,
+        mode, started_at, stats.pages_walked, stats.documents_seen,
+        stats.receipts_new, error,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
-async def done_pages(pool: asyncpg.Pool, cfg: Config) -> set[int]:
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT page_number FROM ofd.load_log
-            WHERE organization_id = $1 AND page_size = $2
-            """,
-            cfg.organization_id, cfg.page_size,
+async def run_all(
+    cfg: Config, writer: Writer, client: OfdClient,
+    from_page: int | None = None, to_page: int | None = None,
+) -> RunStats:
+    """Full backfill/reconciliation: walk every page once, oldest-bound by
+    totalCount. Idempotent inserts mean this doubles as a full reconciliation
+    pass — safe, and cheap in DB terms, to re-run at any time."""
+    stats = RunStats()
+
+    first = from_page or 1
+    total_count, docs = await client.fetch_page(first, cfg.page_size)
+    log.info("all: totalCount=%s", total_count)
+
+    last_page = to_page
+    if last_page is None and total_count:
+        last_page = first + (total_count + cfg.page_size - 1) // cfg.page_size - 1
+
+    stats.pages_walked += 1
+    if not docs:
+        log.info("all: page %s empty; nothing to load", first)
+        return stats
+
+    stats.receipts_new += await writer.write_page(first, docs)
+    stats.documents_seen += len(docs)
+
+    page = first + 1
+    batch = max(cfg.concurrency, 1)
+
+    while last_page is None or page <= last_page:
+        pages = list(range(page, min(page + batch, (last_page or page + batch) + 1)))
+        if not pages:
+            break
+
+        results = await asyncio.gather(
+            *(client.fetch_page(p, cfg.page_size) for p in pages),
+            return_exceptions=True,
         )
-    return {r["page_number"] for r in rows}
+
+        stop = False
+        for page_number, result in zip(pages, results):
+            if isinstance(result, Exception):
+                log.error("all: page %s gave up: %s", page_number, result)
+                continue
+
+            _, page_docs = result
+            stats.pages_walked += 1
+            if not page_docs:
+                log.info("all: page %s empty; end of data", page_number)
+                stop = True
+                break
+
+            stats.receipts_new += await writer.write_page(page_number, page_docs)
+            stats.documents_seen += len(page_docs)
+            log.info(
+                "all: page %s documents=%s new_total=%s seen_total=%s",
+                page_number, len(page_docs), stats.receipts_new, stats.documents_seen,
+            )
+
+        if stop:
+            break
+        page += batch
+
+    log.info(
+        "all: finished pages=%s documents=%s new=%s",
+        stats.pages_walked, stats.documents_seen, stats.receipts_new,
+    )
+    return stats
+
+
+async def run_recent(cfg: Config, writer: Writer, client: OfdClient) -> RunStats:
+    """Delta fetch: walk forward from page 1 (newest first) until enough
+    consecutive pages contain nothing new. Cheap enough to run every 30 min.
+
+    On a fresh/empty database this will walk the entire history, which is
+    correct (there's nothing to consider "already seen" yet) but slow — run
+    `all` once first to backfill before turning on the schedule."""
+    stats = RunStats()
+    consecutive_empty_new = 0
+    page = 1
+
+    while consecutive_empty_new < cfg.recent_stop_empty_pages:
+        _, docs = await client.fetch_page(page, cfg.recent_page_size)
+        stats.pages_walked += 1
+
+        if not docs:
+            log.info("recent: page %s empty; end of data", page)
+            break
+
+        new_inserted = await writer.write_page(page, docs)
+        stats.documents_seen += len(docs)
+        stats.receipts_new += new_inserted
+
+        consecutive_empty_new = 0 if new_inserted else consecutive_empty_new + 1
+        log.info(
+            "recent: page %s documents=%s new=%s consecutive_empty=%s",
+            page, len(docs), new_inserted, consecutive_empty_new,
+        )
+        page += 1
+
+    log.info(
+        "recent: finished pages=%s documents=%s new=%s",
+        stats.pages_walked, stats.documents_seen, stats.receipts_new,
+    )
+    return stats
 
 
 async def open_pool(cfg: Config) -> asyncpg.Pool:
-    """Connect, turning the usual failures into an actionable message."""
-    cfg.warn_on_dsn_password()
-    target = cfg.db_target()
-    log.info("Connecting to postgres %s", target)
+    """Connect, turning the usual failures into an actionable message.
+
+    Raises a plain RuntimeError (never sys.exit) so a transient outage stays
+    catchable by `execute()` / the `serve` job wrappers instead of killing a
+    long-running scheduler process."""
+    log.info(
+        "Connecting to postgres %s@%s:%s/%s",
+        cfg.db_kwargs["user"], cfg.db_kwargs["host"],
+        cfg.db_kwargs["port"], cfg.db_kwargs["database"],
+    )
     try:
-        return await asyncpg.create_pool(min_size=1, max_size=4, **cfg.db)
-    except socket.gaierror as exc:
-        host = target.split("@", 1)[1].split(":", 1)[0]
-        sys.exit(
-            f"Cannot resolve database host {host!r} ({exc}).\n"
-            "  - If your password contains '@', asyncpg splits the DSN at the\n"
-            "    FIRST '@' and treats the rest as the hostname. Use the\n"
-            "    DB_HOST/DB_USER/DB_PASSWORD/DB_NAME variables instead of\n"
-            "    DATABASE_URL, or percent-encode the password (@ -> %40).\n"
-            f"  - If {host!r} is a Docker service name, run inside the same\n"
-            "    compose network or point DB_HOST at the published address.\n"
-            "  - Otherwise check DNS: getent hosts " + host
-        )
+        return await asyncpg.create_pool(min_size=1, max_size=4, **cfg.db_kwargs)
     except OSError as exc:
-        sys.exit(f"Cannot reach database at {target}: {exc}")
-    except asyncpg.InvalidPasswordError:
-        sys.exit(f"Password rejected for {target}")
-    except asyncpg.InvalidCatalogNameError:
-        sys.exit(f"Database does not exist: {target}")
+        raise RuntimeError(f"Cannot reach database at {cfg.db_kwargs['host']}: {exc}") from exc
+    except asyncpg.InvalidPasswordError as exc:
+        raise RuntimeError(
+            f"Password rejected for {cfg.db_kwargs['user']}@{cfg.db_kwargs['host']}"
+        ) from exc
+    except asyncpg.InvalidCatalogNameError as exc:
+        raise RuntimeError(f"Database does not exist: {cfg.db_kwargs['database']}") from exc
 
 
-async def run(args: argparse.Namespace, cfg: Config) -> None:
-    pool = await open_pool(cfg)
+RunFn = Callable[[Writer, OfdClient], Awaitable[RunStats]]
+
+
+async def execute(cfg: Config, mode: str, run_fn: RunFn) -> RunStats:
+    """Open a pool + HTTP client for one run, execute it, and always record
+    the outcome to ofd.ingest_runs (success or failure) before closing.
+
+    `pool` starts as None and open_pool() runs inside the try block so a
+    connection failure is logged here (not silently dropped by a caller's
+    bare except) and skips the record_run/pool.close() calls it can't do
+    without a pool."""
+    started_at = datetime.now(timezone.utc)
+    pool: asyncpg.Pool | None = None
     try:
-        if args.init_schema:
-            ddl = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
-            async with pool.acquire() as conn:
-                await conn.execute(ddl)
-            log.info("Schema ofd created or already present")
+        pool = await open_pool(cfg)
+        timeout = httpx.Timeout(cfg.request_timeout)
+        async with httpx.AsyncClient(timeout=timeout) as http_client:
+            ofd_client = OfdClient(cfg, http_client)
+            writer = Writer(pool, cfg)
+            await writer.warm_cache()
+            stats = await run_fn(writer, ofd_client)
 
-        writer = Writer(pool, cfg)
-        await writer.warm_cache()
-
-        skip = await done_pages(pool, cfg) if args.resume else set()
-        if skip:
-            log.info("Resume: skipping %s pages already loaded", len(skip))
-
-        timeout = aiohttp.ClientTimeout(total=cfg.request_timeout)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            client = OfdClient(cfg, session)
-
-            first = args.from_page or cfg.first_page
-            total_count, docs = await client.fetch_page(first)
-            log.info("API reports totalCount=%s", total_count)
-
-            last_page = args.to_page
-            if last_page is None and total_count:
-                last_page = (
-                    first + (total_count + cfg.page_size - 1) // cfg.page_size - 1
-                )
-
-            new_total = 0
-            if first in skip:
-                log.info("Page %s already loaded; skipping write", first)
-            else:
-                new_total += await writer.write_page(first, docs)
-            seen = len(docs)
-            seen_ids = {d.get("FnsID") for d in docs}
-
-            page = first + 1
-            batch = max(cfg.concurrency, 1)
-
-            while last_page is None or page <= last_page:
-                pages = [
-                    p for p in range(page, min(page + batch, (last_page or page + batch) + 1))
-                    if p not in skip
-                ]
-                if not pages:
-                    page += batch
-                    continue
-
-                results = await asyncio.gather(
-                    *(client.fetch_page(p) for p in pages),
-                    return_exceptions=True,
-                )
-
-                stop = False
-                for page_number, result in zip(pages, results):
-                    if isinstance(result, Exception):
-                        log.error("Page %s gave up: %s", page_number, result)
-                        continue
-
-                    _, page_docs = result
-                    if not page_docs:
-                        log.info("Page %s empty; end of data", page_number)
-                        stop = True
-                        break
-
-                    ids = {d.get("FnsID") for d in page_docs}
-                    if ids and ids <= seen_ids:
-                        log.warning(
-                            "Page %s repeats documents already seen; stopping. "
-                            "Check that pageNumber is 1-based for this API.",
-                            page_number,
-                        )
-                        stop = True
-                        break
-                    seen_ids |= ids
-
-                    new_total += await writer.write_page(page_number, page_docs)
-                    seen += len(page_docs)
-                    log.info(
-                        "Page %s: %s documents, %s receipts total new, %s seen",
-                        page_number, len(page_docs), new_total, seen,
-                    )
-
-                    if len(page_docs) < cfg.page_size:
-                        log.info("Short page %s; end of data", page_number)
-                        stop = True
-                        break
-
-                if stop:
-                    break
-                page += batch
-
-            log.info("Finished: %s documents seen, %s new receipts stored",
-                     seen, new_total)
+        await record_run(pool, mode, started_at, stats)
+        return stats
+    except Exception as exc:
+        log.exception("%s: run failed", mode)
+        if pool is not None:
+            try:
+                await record_run(pool, mode, started_at, RunStats(), error=str(exc)[:500])
+            except Exception:
+                log.exception("%s: failed to record the failed run", mode)
+        raise
     finally:
-        await pool.close()
+        if pool is not None:
+            await pool.close()
 
+
+# ---------------------------------------------------------------------------
+# Scheduler (Docker `serve` service)
+# ---------------------------------------------------------------------------
+
+def _cron_minutes(interval_minutes: int) -> str:
+    return ",".join(str(m) for m in range(0, 60, interval_minutes))
+
+
+def build_scheduler(cfg: Config) -> AsyncIOScheduler:
+    scheduler = AsyncIOScheduler()
+    minute = _cron_minutes(cfg.schedule_interval_minutes)
+    hour = f"{cfg.schedule_hour_start}-{cfg.schedule_hour_end}"
+
+    async def recent_job() -> None:
+        try:
+            await execute(cfg, "recent", lambda w, c: run_recent(cfg, w, c))
+        except Exception:
+            pass  # already logged and recorded; keep the scheduler alive
+
+    async def nightly_job() -> None:
+        try:
+            await execute(cfg, "all", lambda w, c: run_all(cfg, w, c))
+        except Exception:
+            pass
+
+    scheduler.add_job(
+        recent_job, trigger=CronTrigger(minute=minute, hour=hour),
+        id="recent", replace_existing=True,
+    )
+    scheduler.add_job(
+        nightly_job,
+        trigger=CronTrigger(hour=cfg.nightly_reconcile_hour, minute=0),
+        id="nightly_reconcile", replace_existing=True,
+    )
+    return scheduler
+
+
+async def serve(cfg: Config) -> None:
+    scheduler = build_scheduler(cfg)
+    scheduler.start()
+    log.info(
+        "serve: scheduler started jobs=%s",
+        [j.id for j in scheduler.get_jobs()],
+    )
+    try:
+        await asyncio.Event().wait()  # run forever
+    finally:
+        scheduler.shutdown(wait=False)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Load Astral OFD receipts into PostgreSQL")
-    parser.add_argument("--init-schema", action="store_true",
-                        help="apply schema.sql before loading")
-    parser.add_argument("--from-page", type=int, default=None)
-    parser.add_argument("--to-page", type=int, default=None)
-    parser.add_argument("--resume", action="store_true",
-                        help="skip pages recorded in ofd.load_log")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_all = sub.add_parser("all", help="full backfill / reconciliation (walks every page once)")
+    p_all.add_argument("--from-page", type=int, default=None)
+    p_all.add_argument("--to-page", type=int, default=None)
+
+    sub.add_parser("recent", help="fetch only the newest not-yet-loaded receipts")
+    sub.add_parser("serve", help="run the scheduler: `recent` on a schedule, nightly `all`")
+
     args = parser.parse_args()
-
     cfg = Config()
-    logging.basicConfig(
-        level=cfg.log_level,
-        format="%(asctime)s %(levelname)-7s %(message)s",
-        datefmt="%H:%M:%S",
-    )
 
-    try:
-        asyncio.run(run(args, cfg))
-    except KeyboardInterrupt:
-        log.info("Interrupted; already-written pages are safe to resume from")
+    setup_logging()
+    logging.getLogger().setLevel(cfg.log_level)
+
+    if args.command == "all":
+        asyncio.run(execute(
+            cfg, "all",
+            lambda w, c: run_all(cfg, w, c, args.from_page, args.to_page),
+        ))
+    elif args.command == "recent":
+        asyncio.run(execute(cfg, "recent", lambda w, c: run_recent(cfg, w, c)))
+    elif args.command == "serve":
+        try:
+            asyncio.run(serve(cfg))
+        except KeyboardInterrupt:
+            log.info("serve: interrupted, shutting down")
 
 
 if __name__ == "__main__":

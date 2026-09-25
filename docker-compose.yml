@@ -80,7 +80,29 @@ services:
       DATABASE_URL: ${DB_URL_MIGRATIONS}
     command: >
       poetry run yoyo apply --batch --database ${DB_URL_MIGRATIONS} migrations
-  
+
+  receipts-scheduler:
+    build: .
+    command: poetry run python reciepts_ingestor.py serve
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+
+  # One-off / on-demand full backfill and reconciliation. Excluded from a
+  # normal `docker compose up` by its profile; run manually with:
+  #   sudo docker compose run --rm receipts-backfill
+  receipts-backfill:
+    build: .
+    command: poetry run python reciepts_ingestor.py all
+    profiles: ["manual"]
+    depends_on:
+      - db
+    env_file:
+      - .env
+
   loki:
     image: grafana/loki
     ports:
