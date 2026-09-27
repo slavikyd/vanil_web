@@ -15,6 +15,7 @@ from fastapi import status
 from openpyxl import Workbook
 
 from .models import *
+from core import ofd_analytics
 from core.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -793,3 +794,51 @@ class ShopsAdmin(admin.ModelAdmin):
 @admin.register(ShopsGroups)
 class ShopsGroupsAdmin(admin.ModelAdmin):
     list_display = ['id', 'name']
+
+
+DEFAULT_SUMMARY_RANGE_DAYS = 90
+
+
+def _parse_summary_range(request: HttpRequest) -> tuple[date, date]:
+    """Reads ?from=&to= as an inclusive day range, defaulting to the last 90 days."""
+    today = timezone.localdate()
+    date_from = parse_date(request.GET.get('from') or '') or today - timedelta(days=DEFAULT_SUMMARY_RANGE_DAYS)
+    date_to = parse_date(request.GET.get('to') or '') or today
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+    return date_from, date_to
+
+
+@admin.register(OfdSummary)
+class OfdSummaryAdmin(admin.ModelAdmin):
+    """Read-only OFD revenue summary. Not a real editable entity — see
+    core.models.OfdSummary for why it's registered at all."""
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: Any = None) -> bool:
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: Any = None) -> bool:
+        return False
+
+    def changelist_view(self, request: HttpRequest, extra_context: dict | None = None) -> HttpResponse:
+        date_from, date_to = _parse_summary_range(request)
+        query_upper_bound = date_to + timedelta(days=1)  # date_to itself is inclusive
+
+        summary = ofd_analytics.get_summary(date_from, query_upper_bound)
+        daily = ofd_analytics.get_daily_breakdown(date_from, query_upper_bound)
+
+        ctx = {
+            **self.admin_site.each_context(request),
+            "title": "Сводка ОФД",
+            "opts": self.model._meta,
+            "date_from": date_from,
+            "date_to": date_to,
+            "summary": summary,
+            "daily_days": [point.day.isoformat() for point in daily],
+            "daily_cash": [point.cash_rub for point in daily],
+            "daily_card": [point.card_rub for point in daily],
+        }
+        return TemplateResponse(request, "admin/ofd/summary.html", ctx)

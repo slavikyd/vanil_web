@@ -45,6 +45,23 @@ class YoyoVersion(models.Model):
         db_table = '_yoyo_version'
 
 
+class OfdSummary(models.Model):
+    """Marker model only — gives the OFD dashboard an admin entry.
+
+    ofd.receipts belongs to the separate receipts-ingestor's own
+    migrations; this model is never queried, only registered for its
+    admin URL/menu entry. See OfdSummaryAdmin.changelist_view.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+
+    class Meta:
+        managed = False
+        db_table = '"ofd"."receipts"'
+        verbose_name = 'Сводка ОФД'
+        verbose_name_plural = 'Сводка ОФД'
+
+
 class Cashiers(models.Model):
     id = models.TextField(primary_key=True, default=uuid.uuid4)
     full_name = models.TextField(max_length=100)

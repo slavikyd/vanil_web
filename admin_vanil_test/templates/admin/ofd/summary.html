@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .ofd-topbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin: 12px 0; }
+  .ofd-topbar h1 { margin: 0; font-size: 20px; }
+  .ofd-range { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ofd-range input[type="date"] { padding: 4px 6px; }
+  .ofd-cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
+  .ofd-card { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 14px 16px; background: var(--body-bg); }
+  .ofd-card .label { color: var(--body-quiet-color); font-size: 13px; margin-bottom: 6px; }
+  .ofd-card .value { font-size: 28px; font-variant-numeric: tabular-nums; }
+  .ofd-chart-wrap { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 14px 16px; background: var(--body-bg); }
+  .ofd-chart-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ofd-topbar">
+  <h1>{{ title }}</h1>
+  <form class="ofd-range" method="get">
+    <label>С <input type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></label>
+    <label>По <input type="date" name="to" value="{{ date_to|date:'Y-m-d' }}"></label>
+    <button type="submit" class="button">Показать</button>
+  </form>
+</div>
+
+<div class="ofd-cards">
+  <div class="ofd-card">
+    <div class="label">Выручка</div>
+    <div class="value">{{ summary.revenue_rub|floatformat:0 }} ₽</div>
+  </div>
+  <div class="ofd-card">
+    <div class="label">Наличные</div>
+    <div class="value">{{ summary.cash_share_pct|floatformat:1 }}%</div>
+  </div>
+  <div class="ofd-card">
+    <div class="label">Безналичные (карты)</div>
+    <div class="value">{{ summary.card_share_pct|floatformat:1 }}%</div>
+  </div>
+</div>
+
+<div class="ofd-chart-wrap">
+  <h2>Выручка по дням: наличные / безналичные</h2>
+  <canvas id="ofd-daily-chart" height="90"></canvas>
+</div>
+
+{{ daily_days|json_script:"ofd-daily-days" }}
+{{ daily_cash|json_script:"ofd-daily-cash" }}
+{{ daily_card|json_script:"ofd-daily-card" }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+(() => {
+  const days = JSON.parse(document.getElementById('ofd-daily-days').textContent);
+  const cash = JSON.parse(document.getElementById('ofd-daily-cash').textContent);
+  const card = JSON.parse(document.getElementById('ofd-daily-card').textContent);
+
+  new Chart(document.getElementById('ofd-daily-chart'), {
+    type: 'bar',
+    data: {
+      labels: days,
+      datasets: [
+        { label: 'Наличные', data: cash, backgroundColor: '#4caf50', stack: 'revenue' },
+        { label: 'Безналичные', data: card, backgroundColor: '#2196f3', stack: 'revenue' },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, ticks: { callback: (value) => `${value} ₽` } },
+      },
+      plugins: {
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} ₽` } },
+      },
+    },
+  });
+})();
+</script>
+{% endblock %}
