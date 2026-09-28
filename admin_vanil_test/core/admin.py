@@ -797,12 +797,12 @@ class ShopsGroupsAdmin(admin.ModelAdmin):
     list_display = ['id', 'name']
 
 
-DEFAULT_SUMMARY_RANGE_DAYS = 90
+DEFAULT_SUMMARY_RANGE_DAYS = 7
 MAX_MATRIX_DAYS = 31  # the shops×days table stops being readable past ~a month of columns
 
 
 def _parse_summary_range(request: HttpRequest) -> tuple[date, date]:
-    """Reads ?from=&to= as an inclusive day range, defaulting to the last 90 days."""
+    """Reads ?from=&to= as an inclusive day range, defaulting to the last 7 days."""
     today = timezone.localdate()
     date_from = parse_date(request.GET.get('from') or '') or today - timedelta(days=DEFAULT_SUMMARY_RANGE_DAYS)
     date_to = parse_date(request.GET.get('to') or '') or today
@@ -841,7 +841,7 @@ class OfdSummaryAdmin(admin.ModelAdmin):
 
         ctx = {
             **self.admin_site.each_context(request),
-            "title": "Сводка ОФД",
+            "title": "Отчет по выручке",
             "opts": self.model._meta,
             "date_from": date_from,
             "date_to": date_to,

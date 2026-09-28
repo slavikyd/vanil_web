@@ -58,8 +58,8 @@ class OfdSummary(models.Model):
     class Meta:
         managed = False
         db_table = '"ofd"."receipts"'
-        verbose_name = 'Сводка ОФД'
-        verbose_name_plural = 'Сводка ОФД'
+        verbose_name = 'Отчет по выручке'
+        verbose_name_plural = 'Отчет по выручке'
 
 
 class Cashiers(models.Model):
