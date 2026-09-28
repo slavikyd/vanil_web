@@ -10,52 +10,73 @@ ofd.receipts.date, the local-calendar-day column the ingestor already
 computes at load time — filtering on it (rather than re-deriving day
 boundaries from the timestamptz issued_at column here) avoids a second,
 possibly drifting definition of "which day" a receipt belongs to.
+
+An optional `shop` narrows every query to one shop (matched the same way
+the Grafana dashboards do: the shop's address, or "ККТ <register id>"
+for a register with no shop linked yet) — `None`/empty means all shops.
 """
 
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from django.db import connection
 
-_SUMMARY_SQL = """
-    SELECT
-        coalesce(sum(total_kop), 0) AS total_kop,
-        coalesce(sum(cash_kop), 0) AS cash_kop,
-        coalesce(sum(ecash_kop), 0) AS ecash_kop
-    FROM ofd.receipts
-    WHERE operation_type = 1
-      AND date >= %s
-      AND date < %s
+_SHOP_EXPR = "coalesce(sh.address, 'ККТ ' || reg.kkt_reg_id)"
+_SHOP_JOIN = """
+    JOIN ofd.registers reg ON reg.kkt_reg_id = r.kkt_reg_id
+    LEFT JOIN ofd.shops sh ON sh.id = reg.shop_id
+"""
+_SHOP_FILTER_CLAUSE = f"AND {_SHOP_EXPR} = %s"
+
+_SHOP_LIST_SQL = f"""
+    SELECT DISTINCT {_SHOP_EXPR}
+    FROM ofd.registers reg
+    LEFT JOIN ofd.shops sh ON sh.id = reg.shop_id
+    ORDER BY 1
 """
 
-_DAILY_SQL = """
+_SUMMARY_SQL = f"""
     SELECT
-        date,
-        coalesce(sum(cash_kop), 0) AS cash_kop,
-        coalesce(sum(ecash_kop), 0) AS ecash_kop
-    FROM ofd.receipts
-    WHERE operation_type = 1
-      AND date >= %s
-      AND date < %s
-    GROUP BY date
-    ORDER BY date
-"""
-
-_DAILY_SHOP_SQL = """
-    SELECT
-        r.date,
-        coalesce(sh.address, 'ККТ ' || reg.kkt_reg_id) AS shop,
         coalesce(sum(r.total_kop), 0) AS total_kop,
         coalesce(sum(r.cash_kop), 0) AS cash_kop,
         coalesce(sum(r.ecash_kop), 0) AS ecash_kop
     FROM ofd.receipts r
-    JOIN ofd.registers reg ON reg.kkt_reg_id = r.kkt_reg_id
-    LEFT JOIN ofd.shops sh ON sh.id = reg.shop_id
+    {_SHOP_JOIN}
     WHERE r.operation_type = 1
       AND r.date >= %s
       AND r.date < %s
-    GROUP BY r.date, coalesce(sh.address, 'ККТ ' || reg.kkt_reg_id)
-    ORDER BY r.date DESC, shop
+      {{shop_filter}}
+"""
+
+_DAILY_SQL = f"""
+    SELECT
+        r.date,
+        coalesce(sum(r.cash_kop), 0) AS cash_kop,
+        coalesce(sum(r.ecash_kop), 0) AS ecash_kop
+    FROM ofd.receipts r
+    {_SHOP_JOIN}
+    WHERE r.operation_type = 1
+      AND r.date >= %s
+      AND r.date < %s
+      {{shop_filter}}
+    GROUP BY r.date
+    ORDER BY r.date
+"""
+
+_SHOP_DAY_MATRIX_SQL = f"""
+    SELECT
+        r.date,
+        {_SHOP_EXPR} AS shop,
+        coalesce(sum(r.total_kop), 0) AS total_kop
+    FROM ofd.receipts r
+    {_SHOP_JOIN}
+    WHERE r.operation_type = 1
+      AND r.date >= %s
+      AND r.date < %s
+      {{shop_filter}}
+    GROUP BY r.date, shop
+    ORDER BY r.date, shop
 """
 
 
@@ -78,22 +99,44 @@ class DailyPoint:
 
 
 @dataclass(frozen=True)
-class ShopDayRow:
-    """One shop's revenue and cash/card split on one day."""
+class ShopDayMatrixRow:
+    """One shop's revenue for each day in the matrix, aligned with days."""
 
-    day: date
     shop: str
-    revenue_rub: float
-    cash_rub: float
-    cash_share_pct: float
-    card_rub: float
-    card_share_pct: float
+    revenue_by_day: list[float]
+    total_rub: float
 
 
-def get_summary(date_from: date, date_to: date) -> SummaryTotals:
-    """Revenue and cash/card share for receipt dates in [date_from, date_to)."""
+@dataclass(frozen=True)
+class ShopDayMatrix:
+    """Revenue pivoted: shops as rows, days as columns."""
+
+    days: list[date]
+    rows: list[ShopDayMatrixRow]
+
+
+def _with_shop_filter(sql_template: str, shop: str | None, params: list[Any]) -> str:
+    """Fills in the {shop_filter} placeholder, appending `shop` to params if set."""
+    if not shop:
+        return sql_template.format(shop_filter="")
+    params.append(shop)
+    return sql_template.format(shop_filter=_SHOP_FILTER_CLAUSE)
+
+
+def get_shop_list() -> list[str]:
+    """Every distinct shop label, for populating the shop filter dropdown."""
     with connection.cursor() as cursor:
-        cursor.execute(_SUMMARY_SQL, [date_from, date_to])
+        cursor.execute(_SHOP_LIST_SQL)
+        return [row[0] for row in cursor.fetchall()]
+
+
+def get_summary(date_from: date, date_to: date, shop: str | None = None) -> SummaryTotals:
+    """Revenue and cash/card share for receipt dates in [date_from, date_to)."""
+    params: list[Any] = [date_from, date_to]
+    sql = _with_shop_filter(_SUMMARY_SQL, shop, params)
+
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
         total_kop, cash_kop, ecash_kop = cursor.fetchone()
 
     if not total_kop:
@@ -106,10 +149,13 @@ def get_summary(date_from: date, date_to: date) -> SummaryTotals:
     )
 
 
-def get_daily_breakdown(date_from: date, date_to: date) -> list[DailyPoint]:
+def get_daily_breakdown(date_from: date, date_to: date, shop: str | None = None) -> list[DailyPoint]:
     """Per-day cash/card revenue for receipt dates in [date_from, date_to)."""
+    params: list[Any] = [date_from, date_to]
+    sql = _with_shop_filter(_DAILY_SQL, shop, params)
+
     with connection.cursor() as cursor:
-        cursor.execute(_DAILY_SQL, [date_from, date_to])
+        cursor.execute(sql, params)
         rows = cursor.fetchall()
 
     return [
@@ -118,23 +164,24 @@ def get_daily_breakdown(date_from: date, date_to: date) -> list[DailyPoint]:
     ]
 
 
-def get_daily_shop_breakdown(date_from: date, date_to: date) -> list[ShopDayRow]:
-    """Per-day, per-shop revenue and cash/card split for [date_from, date_to)."""
+def get_shop_day_matrix(date_from: date, date_to: date, shop: str | None = None) -> ShopDayMatrix:
+    """Revenue per shop per day for [date_from, date_to), pivoted for display."""
+    params: list[Any] = [date_from, date_to]
+    sql = _with_shop_filter(_SHOP_DAY_MATRIX_SQL, shop, params)
+
     with connection.cursor() as cursor:
-        cursor.execute(_DAILY_SHOP_SQL, [date_from, date_to])
+        cursor.execute(sql, params)
         rows = cursor.fetchall()
 
-    result = []
-    for day, shop, total_kop, cash_kop, ecash_kop in rows:
-        cash_share_pct = cash_kop * 100 / total_kop if total_kop else 0.0
-        card_share_pct = ecash_kop * 100 / total_kop if total_kop else 0.0
-        result.append(ShopDayRow(
-            day=day,
-            shop=shop,
-            revenue_rub=total_kop / 100,
-            cash_rub=cash_kop / 100,
-            cash_share_pct=cash_share_pct,
-            card_rub=ecash_kop / 100,
-            card_share_pct=card_share_pct,
-        ))
-    return result
+    days = sorted({day for day, _shop, _total_kop in rows})
+    day_index = {day: position for position, day in enumerate(days)}
+
+    revenue_by_shop: dict[str, list[float]] = {}
+    for day, shop_name, total_kop in rows:
+        revenue_by_shop.setdefault(shop_name, [0.0] * len(days))[day_index[day]] = total_kop / 100
+
+    matrix_rows = [
+        ShopDayMatrixRow(shop=shop_name, revenue_by_day=values, total_rub=sum(values))
+        for shop_name, values in sorted(revenue_by_shop.items())
+    ]
+    return ShopDayMatrix(days=days, rows=matrix_rows)

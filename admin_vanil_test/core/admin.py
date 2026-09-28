@@ -826,21 +826,24 @@ class OfdSummaryAdmin(admin.ModelAdmin):
     def changelist_view(self, request: HttpRequest, extra_context: dict | None = None) -> HttpResponse:
         date_from, date_to = _parse_summary_range(request)
         query_upper_bound = date_to + timedelta(days=1)  # date_to itself is inclusive
+        selected_shop = request.GET.get('shop') or None
 
-        summary = ofd_analytics.get_summary(date_from, query_upper_bound)
-        daily = ofd_analytics.get_daily_breakdown(date_from, query_upper_bound)
-        daily_by_shop = ofd_analytics.get_daily_shop_breakdown(date_from, query_upper_bound)
+        summary = ofd_analytics.get_summary(date_from, query_upper_bound, selected_shop)
+        daily = ofd_analytics.get_daily_breakdown(date_from, query_upper_bound, selected_shop)
+        matrix = ofd_analytics.get_shop_day_matrix(date_from, query_upper_bound, selected_shop)
 
         ctx = {
             **self.admin_site.each_context(request),
-            "daily_by_shop": daily_by_shop,
             "title": "Сводка ОФД",
             "opts": self.model._meta,
             "date_from": date_from,
             "date_to": date_to,
+            "shops": ofd_analytics.get_shop_list(),
+            "selected_shop": selected_shop,
             "summary": summary,
             "daily_days": [point.day.isoformat() for point in daily],
             "daily_cash": [point.cash_rub for point in daily],
             "daily_card": [point.card_rub for point in daily],
+            "matrix": matrix,
         }
         return TemplateResponse(request, "admin/ofd/summary.html", ctx)

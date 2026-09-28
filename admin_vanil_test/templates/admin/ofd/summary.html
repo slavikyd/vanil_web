@@ -15,10 +15,12 @@
   .ofd-chart-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
   .ofd-table-wrap { margin-top: 16px; }
   .ofd-table-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
+  .ofd-table-scroll { overflow-x: auto; }
   table.ofd-table { width:100%; border-collapse: collapse; }
-  table.ofd-table th, table.ofd-table td { border: 1px solid var(--hairline-color); padding: 5px 8px; }
+  table.ofd-table th, table.ofd-table td { border: 1px solid var(--hairline-color); padding: 5px 8px; white-space: nowrap; }
   table.ofd-table th { background: var(--darkened-bg); text-align:left; }
-  table.ofd-table td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  table.ofd-table th.num, table.ofd-table td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  table.ofd-table td:first-child, table.ofd-table th:first-child { position: sticky; left: 0; background: var(--body-bg); }
 </style>
 {% endblock %}
 
@@ -28,6 +30,14 @@
   <form class="ofd-range" method="get">
     <label>С <input type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></label>
     <label>По <input type="date" name="to" value="{{ date_to|date:'Y-m-d' }}"></label>
+    <label>Магазин
+      <select name="shop">
+        <option value="">Все магазины</option>
+        {% for shop in shops %}
+          <option value="{{ shop }}" {% if shop == selected_shop %}selected{% endif %}>{{ shop }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <button type="submit" class="button">Показать</button>
   </form>
 </div>
@@ -48,40 +58,34 @@
 </div>
 
 <div class="ofd-chart-wrap">
-  <h2>Выручка по дням: наличные / безналичные</h2>
+  <h2>{% if selected_shop %}Выручка по дням: {{ selected_shop }}{% else %}Выручка по дням: все магазины{% endif %} (наличные / безналичные)</h2>
   <canvas id="ofd-daily-chart" height="90"></canvas>
 </div>
 
 <div class="ofd-table-wrap">
-  <h2>Выручка по дням и магазинам</h2>
+  <h2>Выручка по дням: магазины × дни, ₽</h2>
+  <div class="ofd-table-scroll">
   <table class="ofd-table">
     <thead>
       <tr>
-        <th>Дата</th>
         <th>Магазин</th>
-        <th>Выручка, ₽</th>
-        <th>Наличные, ₽</th>
-        <th>Наличные, %</th>
-        <th>Безналичные, ₽</th>
-        <th>Безналичные, %</th>
+        {% for day in matrix.days %}<th class="num">{{ day|date:'d.m' }}</th>{% endfor %}
+        <th class="num">Итого</th>
       </tr>
     </thead>
     <tbody>
-      {% for row in daily_by_shop %}
+      {% for row in matrix.rows %}
       <tr>
-        <td>{{ row.day|date:'d.m.Y' }}</td>
         <td>{{ row.shop }}</td>
-        <td class="num">{{ row.revenue_rub|floatformat:0 }}</td>
-        <td class="num">{{ row.cash_rub|floatformat:0 }}</td>
-        <td class="num">{{ row.cash_share_pct|floatformat:1 }}</td>
-        <td class="num">{{ row.card_rub|floatformat:0 }}</td>
-        <td class="num">{{ row.card_share_pct|floatformat:1 }}</td>
+        {% for value in row.revenue_by_day %}<td class="num">{{ value|floatformat:0 }}</td>{% endfor %}
+        <td class="num"><strong>{{ row.total_rub|floatformat:0 }}</strong></td>
       </tr>
       {% empty %}
-      <tr><td colspan="7">Нет данных за выбранный период.</td></tr>
+      <tr><td>Нет данных за выбранный период.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 {{ daily_days|json_script:"ofd-daily-days" }}
