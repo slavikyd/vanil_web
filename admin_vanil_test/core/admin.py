@@ -797,6 +797,7 @@ class ShopsGroupsAdmin(admin.ModelAdmin):
 
 
 DEFAULT_SUMMARY_RANGE_DAYS = 90
+MAX_MATRIX_DAYS = 31  # the shops×days table stops being readable past ~a month of columns
 
 
 def _parse_summary_range(request: HttpRequest) -> tuple[date, date]:
@@ -830,7 +831,9 @@ class OfdSummaryAdmin(admin.ModelAdmin):
 
         summary = ofd_analytics.get_summary(date_from, query_upper_bound, selected_shop)
         daily = ofd_analytics.get_daily_breakdown(date_from, query_upper_bound, selected_shop)
-        matrix = ofd_analytics.get_shop_day_matrix(date_from, query_upper_bound, selected_shop)
+
+        matrix_from = max(date_from, date_to - timedelta(days=MAX_MATRIX_DAYS - 1))
+        matrix = ofd_analytics.get_shop_day_matrix(matrix_from, query_upper_bound, selected_shop)
 
         ctx = {
             **self.admin_site.each_context(request),
@@ -838,6 +841,8 @@ class OfdSummaryAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
             "date_from": date_from,
             "date_to": date_to,
+            "matrix_from": matrix_from,
+            "matrix_truncated": matrix_from > date_from,
             "shops": ofd_analytics.get_shop_list(),
             "selected_shop": selected_shop,
             "summary": summary,

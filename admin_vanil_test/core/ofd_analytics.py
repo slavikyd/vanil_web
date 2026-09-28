@@ -68,7 +68,9 @@ _SHOP_DAY_MATRIX_SQL = f"""
     SELECT
         r.date,
         {_SHOP_EXPR} AS shop,
-        coalesce(sum(r.total_kop), 0) AS total_kop
+        coalesce(sum(r.total_kop), 0) AS total_kop,
+        coalesce(sum(r.cash_kop), 0) AS cash_kop,
+        coalesce(sum(r.ecash_kop), 0) AS ecash_kop
     FROM ofd.receipts r
     {_SHOP_JOIN}
     WHERE r.operation_type = 1
@@ -101,12 +103,23 @@ class DailyPoint:
 
 
 @dataclass(frozen=True)
+class DayCell:
+    """One shop's total/cash/card revenue on one day."""
+
+    total_rub: float
+    cash_rub: float
+    card_rub: float
+
+
+@dataclass(frozen=True)
 class ShopDayMatrixRow:
     """One shop's revenue for each day in the matrix, aligned with days."""
 
     shop: str
-    revenue_by_day: list[float]
+    cells: list[DayCell]
     total_rub: float
+    total_cash_rub: float
+    total_card_rub: float
 
 
 @dataclass(frozen=True)
@@ -184,15 +197,27 @@ def get_shop_day_matrix(date_from: date, date_to: date, shop: str | None = None)
         cursor.execute(sql, params)
         rows = cursor.fetchall()
 
-    days = sorted({day for day, _shop, _total_kop in rows})
+    days = sorted({day for day, _shop, _total, _cash, _ecash in rows})
     day_index = {day: position for position, day in enumerate(days)}
+    empty_cell = DayCell(total_rub=0.0, cash_rub=0.0, card_rub=0.0)
 
-    revenue_by_shop: dict[str, list[float]] = {}
-    for day, shop_name, total_kop in rows:
-        revenue_by_shop.setdefault(shop_name, [0.0] * len(days))[day_index[day]] = float(total_kop) / 100
+    cells_by_shop: dict[str, list[DayCell]] = {}
+    for day, shop_name, total_kop, cash_kop, ecash_kop in rows:
+        cell = DayCell(
+            total_rub=float(total_kop) / 100,
+            cash_rub=float(cash_kop) / 100,
+            card_rub=float(ecash_kop) / 100,
+        )
+        cells_by_shop.setdefault(shop_name, [empty_cell] * len(days))[day_index[day]] = cell
 
     matrix_rows = [
-        ShopDayMatrixRow(shop=shop_name, revenue_by_day=values, total_rub=sum(values))
-        for shop_name, values in sorted(revenue_by_shop.items())
+        ShopDayMatrixRow(
+            shop=shop_name,
+            cells=cells,
+            total_rub=sum(cell.total_rub for cell in cells),
+            total_cash_rub=sum(cell.cash_rub for cell in cells),
+            total_card_rub=sum(cell.card_rub for cell in cells),
+        )
+        for shop_name, cells in sorted(cells_by_shop.items())
     ]
     return ShopDayMatrix(days=days, rows=matrix_rows)

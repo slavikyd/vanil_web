@@ -22,6 +22,13 @@
   table.ofd-table th { background: var(--darkened-bg); text-align:left; }
   table.ofd-table th.num, table.ofd-table td.num { text-align:right; font-variant-numeric: tabular-nums; }
   table.ofd-table td:first-child, table.ofd-table th:first-child { position: sticky; left: 0; background: var(--body-bg); }
+  .ofd-table .cell-total { font-weight: 600; }
+  .ofd-table .cell-split { font-size: 11px; color: var(--body-quiet-color); margin-top: 2px; }
+  .ofd-table .cell-split .cash { color: #2e7d32; }
+  .ofd-table .cell-split .card { color: #1565c0; }
+  .ofd-legend { font-size: 12px; color: var(--body-quiet-color); margin-bottom: 8px; }
+  .ofd-legend .cash { color: #2e7d32; }
+  .ofd-legend .card { color: #1565c0; }
 </style>
 {% endblock %}
 
@@ -66,7 +73,11 @@
 </div>
 
 <div class="ofd-table-wrap">
-  <h2>Выручка по дням: магазины × дни, ₽</h2>
+  <h2>
+    Выручка по дням: магазины × дни, ₽
+    {% if matrix_truncated %}<span class="sub">(последние 31 дн. выбранного периода — с {{ matrix_from|date:'d.m' }} по {{ date_to|date:'d.m' }})</span>{% endif %}
+  </h2>
+  <div class="ofd-legend">Каждая ячейка: <strong>итого</strong> сверху, <span class="cash">наличные</span> / <span class="card">безналичные</span> снизу.</div>
   <div class="ofd-table-scroll">
   <table class="ofd-table">
     <thead>
@@ -80,8 +91,16 @@
       {% for row in matrix.rows %}
       <tr>
         <td>{{ row.shop }}</td>
-        {% for value in row.revenue_by_day %}<td class="num">{{ value|floatformat:0 }}</td>{% endfor %}
-        <td class="num"><strong>{{ row.total_rub|floatformat:0 }}</strong></td>
+        {% for cell in row.cells %}
+        <td class="num">
+          <div class="cell-total">{{ cell.total_rub|floatformat:0 }}</div>
+          <div class="cell-split"><span class="cash">{{ cell.cash_rub|floatformat:0 }}</span> / <span class="card">{{ cell.card_rub|floatformat:0 }}</span></div>
+        </td>
+        {% endfor %}
+        <td class="num">
+          <div class="cell-total">{{ row.total_rub|floatformat:0 }}</div>
+          <div class="cell-split"><span class="cash">{{ row.total_cash_rub|floatformat:0 }}</span> / <span class="card">{{ row.total_card_rub|floatformat:0 }}</span></div>
+        </td>
       </tr>
       {% empty %}
       <tr><td>Нет данных за выбранный период.</td></tr>
