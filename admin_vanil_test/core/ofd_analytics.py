@@ -85,7 +85,9 @@ class SummaryTotals:
     """Total revenue and its cash/card split for a date range."""
 
     revenue_rub: float
+    cash_rub: float
     cash_share_pct: float
+    card_rub: float
     card_share_pct: float
 
 
@@ -145,11 +147,15 @@ def get_summary(date_from: date, date_to: date, shop: str | None = None) -> Summ
     total_kop, cash_kop, ecash_kop = float(total_kop), float(cash_kop), float(ecash_kop)
 
     if not total_kop:
-        return SummaryTotals(revenue_rub=0.0, cash_share_pct=0.0, card_share_pct=0.0)
+        return SummaryTotals(
+            revenue_rub=0.0, cash_rub=0.0, cash_share_pct=0.0, card_rub=0.0, card_share_pct=0.0,
+        )
 
     return SummaryTotals(
         revenue_rub=total_kop / 100,
+        cash_rub=cash_kop / 100,
         cash_share_pct=cash_kop * 100 / total_kop,
+        card_rub=ecash_kop / 100,
         card_share_pct=ecash_kop * 100 / total_kop,
     )
 

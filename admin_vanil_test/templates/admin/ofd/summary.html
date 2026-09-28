@@ -11,13 +11,14 @@
   .ofd-card { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 14px 16px; background: var(--body-bg); }
   .ofd-card .label { color: var(--body-quiet-color); font-size: 13px; margin-bottom: 6px; }
   .ofd-card .value { font-size: 28px; font-variant-numeric: tabular-nums; }
+  .ofd-card .sub { color: var(--body-quiet-color); font-size: 13px; margin-top: 4px; }
   .ofd-chart-wrap { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 14px 16px; background: var(--body-bg); }
   .ofd-chart-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
   .ofd-table-wrap { margin-top: 16px; }
   .ofd-table-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
   .ofd-table-scroll { overflow-x: auto; }
   table.ofd-table { width:100%; border-collapse: collapse; }
-  table.ofd-table th, table.ofd-table td { border: 1px solid var(--hairline-color); padding: 5px 8px; white-space: nowrap; }
+  table.ofd-table th, table.ofd-table td { border: 1px solid var(--hairline-color); padding: 10px 16px; white-space: nowrap; }
   table.ofd-table th { background: var(--darkened-bg); text-align:left; }
   table.ofd-table th.num, table.ofd-table td.num { text-align:right; font-variant-numeric: tabular-nums; }
   table.ofd-table td:first-child, table.ofd-table th:first-child { position: sticky; left: 0; background: var(--body-bg); }
@@ -49,11 +50,13 @@
   </div>
   <div class="ofd-card">
     <div class="label">Наличные</div>
-    <div class="value">{{ summary.cash_share_pct|floatformat:1 }}%</div>
+    <div class="value">{{ summary.cash_rub|floatformat:0 }} ₽</div>
+    <div class="sub">{{ summary.cash_share_pct|floatformat:1 }}% от выручки</div>
   </div>
   <div class="ofd-card">
     <div class="label">Безналичные (карты)</div>
-    <div class="value">{{ summary.card_share_pct|floatformat:1 }}%</div>
+    <div class="value">{{ summary.card_rub|floatformat:0 }} ₽</div>
+    <div class="sub">{{ summary.card_share_pct|floatformat:1 }}% от выручки</div>
   </div>
 </div>
 
