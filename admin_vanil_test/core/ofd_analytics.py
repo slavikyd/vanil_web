@@ -139,6 +139,11 @@ def get_summary(date_from: date, date_to: date, shop: str | None = None) -> Summ
         cursor.execute(sql, params)
         total_kop, cash_kop, ecash_kop = cursor.fetchone()
 
+    # sum() over a bigint column comes back as numeric, which psycopg2 maps
+    # to Decimal — cast to float so this matches the declared field types
+    # and can be mixed freely with plain floats elsewhere.
+    total_kop, cash_kop, ecash_kop = float(total_kop), float(cash_kop), float(ecash_kop)
+
     if not total_kop:
         return SummaryTotals(revenue_rub=0.0, cash_share_pct=0.0, card_share_pct=0.0)
 
@@ -159,7 +164,7 @@ def get_daily_breakdown(date_from: date, date_to: date, shop: str | None = None)
         rows = cursor.fetchall()
 
     return [
-        DailyPoint(day=day, cash_rub=cash_kop / 100, card_rub=ecash_kop / 100)
+        DailyPoint(day=day, cash_rub=float(cash_kop) / 100, card_rub=float(ecash_kop) / 100)
         for day, cash_kop, ecash_kop in rows
     ]
 
@@ -178,7 +183,7 @@ def get_shop_day_matrix(date_from: date, date_to: date, shop: str | None = None)
 
     revenue_by_shop: dict[str, list[float]] = {}
     for day, shop_name, total_kop in rows:
-        revenue_by_shop.setdefault(shop_name, [0.0] * len(days))[day_index[day]] = total_kop / 100
+        revenue_by_shop.setdefault(shop_name, [0.0] * len(days))[day_index[day]] = float(total_kop) / 100
 
     matrix_rows = [
         ShopDayMatrixRow(shop=shop_name, revenue_by_day=values, total_rub=sum(values))
