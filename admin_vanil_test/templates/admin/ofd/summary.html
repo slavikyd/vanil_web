@@ -13,6 +13,12 @@
   .ofd-card .value { font-size: 28px; font-variant-numeric: tabular-nums; }
   .ofd-chart-wrap { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 14px 16px; background: var(--body-bg); }
   .ofd-chart-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
+  .ofd-table-wrap { margin-top: 16px; }
+  .ofd-table-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
+  table.ofd-table { width:100%; border-collapse: collapse; }
+  table.ofd-table th, table.ofd-table td { border: 1px solid var(--hairline-color); padding: 5px 8px; }
+  table.ofd-table th { background: var(--darkened-bg); text-align:left; }
+  table.ofd-table td.num { text-align:right; font-variant-numeric: tabular-nums; }
 </style>
 {% endblock %}
 
@@ -44,6 +50,38 @@
 <div class="ofd-chart-wrap">
   <h2>Выручка по дням: наличные / безналичные</h2>
   <canvas id="ofd-daily-chart" height="90"></canvas>
+</div>
+
+<div class="ofd-table-wrap">
+  <h2>Выручка по дням и магазинам</h2>
+  <table class="ofd-table">
+    <thead>
+      <tr>
+        <th>Дата</th>
+        <th>Магазин</th>
+        <th>Выручка, ₽</th>
+        <th>Наличные, ₽</th>
+        <th>Наличные, %</th>
+        <th>Безналичные, ₽</th>
+        <th>Безналичные, %</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in daily_by_shop %}
+      <tr>
+        <td>{{ row.day|date:'d.m.Y' }}</td>
+        <td>{{ row.shop }}</td>
+        <td class="num">{{ row.revenue_rub|floatformat:0 }}</td>
+        <td class="num">{{ row.cash_rub|floatformat:0 }}</td>
+        <td class="num">{{ row.cash_share_pct|floatformat:1 }}</td>
+        <td class="num">{{ row.card_rub|floatformat:0 }}</td>
+        <td class="num">{{ row.card_share_pct|floatformat:1 }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7">Нет данных за выбранный период.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 
 {{ daily_days|json_script:"ofd-daily-days" }}

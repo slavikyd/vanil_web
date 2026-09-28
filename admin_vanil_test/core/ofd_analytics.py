@@ -41,6 +41,23 @@ _DAILY_SQL = """
     ORDER BY date
 """
 
+_DAILY_SHOP_SQL = """
+    SELECT
+        r.date,
+        coalesce(sh.address, 'ККТ ' || reg.kkt_reg_id) AS shop,
+        coalesce(sum(r.total_kop), 0) AS total_kop,
+        coalesce(sum(r.cash_kop), 0) AS cash_kop,
+        coalesce(sum(r.ecash_kop), 0) AS ecash_kop
+    FROM ofd.receipts r
+    JOIN ofd.registers reg ON reg.kkt_reg_id = r.kkt_reg_id
+    LEFT JOIN ofd.shops sh ON sh.id = reg.shop_id
+    WHERE r.operation_type = 1
+      AND r.date >= %s
+      AND r.date < %s
+    GROUP BY r.date, coalesce(sh.address, 'ККТ ' || reg.kkt_reg_id)
+    ORDER BY r.date DESC, shop
+"""
+
 
 @dataclass(frozen=True)
 class SummaryTotals:
@@ -58,6 +75,19 @@ class DailyPoint:
     day: date
     cash_rub: float
     card_rub: float
+
+
+@dataclass(frozen=True)
+class ShopDayRow:
+    """One shop's revenue and cash/card split on one day."""
+
+    day: date
+    shop: str
+    revenue_rub: float
+    cash_rub: float
+    cash_share_pct: float
+    card_rub: float
+    card_share_pct: float
 
 
 def get_summary(date_from: date, date_to: date) -> SummaryTotals:
@@ -86,3 +116,25 @@ def get_daily_breakdown(date_from: date, date_to: date) -> list[DailyPoint]:
         DailyPoint(day=day, cash_rub=cash_kop / 100, card_rub=ecash_kop / 100)
         for day, cash_kop, ecash_kop in rows
     ]
+
+
+def get_daily_shop_breakdown(date_from: date, date_to: date) -> list[ShopDayRow]:
+    """Per-day, per-shop revenue and cash/card split for [date_from, date_to)."""
+    with connection.cursor() as cursor:
+        cursor.execute(_DAILY_SHOP_SQL, [date_from, date_to])
+        rows = cursor.fetchall()
+
+    result = []
+    for day, shop, total_kop, cash_kop, ecash_kop in rows:
+        cash_share_pct = cash_kop * 100 / total_kop if total_kop else 0.0
+        card_share_pct = ecash_kop * 100 / total_kop if total_kop else 0.0
+        result.append(ShopDayRow(
+            day=day,
+            shop=shop,
+            revenue_rub=total_kop / 100,
+            cash_rub=cash_kop / 100,
+            cash_share_pct=cash_share_pct,
+            card_rub=ecash_kop / 100,
+            card_share_pct=card_share_pct,
+        ))
+    return result

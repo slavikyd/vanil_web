@@ -829,9 +829,11 @@ class OfdSummaryAdmin(admin.ModelAdmin):
 
         summary = ofd_analytics.get_summary(date_from, query_upper_bound)
         daily = ofd_analytics.get_daily_breakdown(date_from, query_upper_bound)
+        daily_by_shop = ofd_analytics.get_daily_shop_breakdown(date_from, query_upper_bound)
 
         ctx = {
             **self.admin_site.each_context(request),
+            "daily_by_shop": daily_by_shop,
             "title": "Сводка ОФД",
             "opts": self.model._meta,
             "date_from": date_from,
