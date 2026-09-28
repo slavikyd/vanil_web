@@ -5,6 +5,7 @@ from io import BytesIO
 from typing import Any
 
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.template.response import TemplateResponse
@@ -825,6 +826,9 @@ class OfdSummaryAdmin(admin.ModelAdmin):
         return False
 
     def changelist_view(self, request: HttpRequest, extra_context: dict | None = None) -> HttpResponse:
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+
         date_from, date_to = _parse_summary_range(request)
         query_upper_bound = date_to + timedelta(days=1)  # date_to itself is inclusive
         selected_shop = request.GET.get('shop') or None
