@@ -62,6 +62,20 @@ class OfdSummary(models.Model):
         verbose_name_plural = 'Отчет по выручке'
 
 
+class OfdRevenueTotal(models.Model):
+    """Marker model only — same data and admin entry as OfdSummary, just
+    rendered without the cash/card split. See core.admin._OfdReportAdminBase.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+
+    class Meta:
+        managed = False
+        db_table = '"ofd"."receipts"'
+        verbose_name = 'Отчет по выручке (итого)'
+        verbose_name_plural = 'Отчет по выручке (итого)'
+
+
 class Cashiers(models.Model):
     id = models.TextField(primary_key=True, default=uuid.uuid4)
     full_name = models.TextField(max_length=100)

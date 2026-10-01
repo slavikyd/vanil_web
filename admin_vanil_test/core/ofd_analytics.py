@@ -11,9 +11,10 @@ computes at load time — filtering on it (rather than re-deriving day
 boundaries from the timestamptz issued_at column here) avoids a second,
 possibly drifting definition of "which day" a receipt belongs to.
 
-An optional `shop` narrows every query to one shop (matched the same way
-the Grafana dashboards do: the shop's address, or "ККТ <register id>"
-for a register with no shop linked yet) — `None`/empty means all shops.
+An optional `shops` list narrows every query to just those shops (matched
+the same way the Grafana dashboards do: the shop's address, or "ККТ
+<register id>" for a register with no shop linked yet) — `None`/empty
+means all shops.
 """
 
 from dataclasses import dataclass
@@ -27,7 +28,7 @@ _SHOP_JOIN = """
     JOIN ofd.registers reg ON reg.kkt_reg_id = r.kkt_reg_id
     LEFT JOIN ofd.shops sh ON sh.id = reg.shop_id
 """
-_SHOP_FILTER_CLAUSE = f"AND {_SHOP_EXPR} = %s"
+_SHOP_FILTER_CLAUSE = f"AND {_SHOP_EXPR} = ANY(%s)"
 
 _SHOP_LIST_SQL = f"""
     SELECT DISTINCT {_SHOP_EXPR}
@@ -130,11 +131,11 @@ class ShopDayMatrix:
     rows: list[ShopDayMatrixRow]
 
 
-def _with_shop_filter(sql_template: str, shop: str | None, params: list[Any]) -> str:
-    """Fills in the {shop_filter} placeholder, appending `shop` to params if set."""
-    if not shop:
+def _with_shop_filter(sql_template: str, shops: list[str] | None, params: list[Any]) -> str:
+    """Fills in the {shop_filter} placeholder, appending `shops` to params if set."""
+    if not shops:
         return sql_template.format(shop_filter="")
-    params.append(shop)
+    params.append(shops)
     return sql_template.format(shop_filter=_SHOP_FILTER_CLAUSE)
 
 
@@ -145,10 +146,10 @@ def get_shop_list() -> list[str]:
         return [row[0] for row in cursor.fetchall()]
 
 
-def get_summary(date_from: date, date_to: date, shop: str | None = None) -> SummaryTotals:
+def get_summary(date_from: date, date_to: date, shops: list[str] | None = None) -> SummaryTotals:
     """Revenue and cash/card share for receipt dates in [date_from, date_to)."""
     params: list[Any] = [date_from, date_to]
-    sql = _with_shop_filter(_SUMMARY_SQL, shop, params)
+    sql = _with_shop_filter(_SUMMARY_SQL, shops, params)
 
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
@@ -173,10 +174,10 @@ def get_summary(date_from: date, date_to: date, shop: str | None = None) -> Summ
     )
 
 
-def get_daily_breakdown(date_from: date, date_to: date, shop: str | None = None) -> list[DailyPoint]:
+def get_daily_breakdown(date_from: date, date_to: date, shops: list[str] | None = None) -> list[DailyPoint]:
     """Per-day cash/card revenue for receipt dates in [date_from, date_to)."""
     params: list[Any] = [date_from, date_to]
-    sql = _with_shop_filter(_DAILY_SQL, shop, params)
+    sql = _with_shop_filter(_DAILY_SQL, shops, params)
 
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
@@ -188,10 +189,10 @@ def get_daily_breakdown(date_from: date, date_to: date, shop: str | None = None)
     ]
 
 
-def get_shop_day_matrix(date_from: date, date_to: date, shop: str | None = None) -> ShopDayMatrix:
+def get_shop_day_matrix(date_from: date, date_to: date, shops: list[str] | None = None) -> ShopDayMatrix:
     """Revenue per shop per day for [date_from, date_to), pivoted for display."""
     params: list[Any] = [date_from, date_to]
-    sql = _with_shop_filter(_SHOP_DAY_MATRIX_SQL, shop, params)
+    sql = _with_shop_filter(_SHOP_DAY_MATRIX_SQL, shops, params)
 
     with connection.cursor() as cursor:
         cursor.execute(sql, params)

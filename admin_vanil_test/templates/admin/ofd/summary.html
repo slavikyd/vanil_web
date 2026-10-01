@@ -3,10 +3,16 @@
 {% block extrastyle %}
 {{ block.super }}
 <style>
-  .ofd-topbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin: 12px 0; }
+  .ofd-topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin: 12px 0; }
   .ofd-topbar h1 { margin: 0; font-size: 20px; }
   .ofd-range { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .ofd-range input[type="date"] { padding: 4px 6px; }
+  .ofd-shop-picker { position: relative; }
+  .ofd-shop-picker summary { cursor:pointer; border:1px solid var(--hairline-color); border-radius:4px; padding:5px 10px; list-style:none; }
+  .ofd-shop-picker summary::-webkit-details-marker { display:none; }
+  .ofd-shop-picker-panel { position:absolute; top: calc(100% + 4px); left:0; z-index:50; background: var(--body-bg); border:1px solid var(--hairline-color); border-radius:6px; padding:8px; min-width:220px; max-height:320px; overflow-y:auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  .ofd-shop-picker-panel label { display:block; padding:3px 4px; white-space:nowrap; font-weight:normal; }
+  .ofd-shop-picker-panel hr { border:none; border-top:1px solid var(--hairline-color); margin:6px 0; }
   .ofd-cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
   .ofd-card { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 14px 16px; background: var(--body-bg); }
   .ofd-card .label { color: var(--body-quiet-color); font-size: 13px; margin-bottom: 6px; }
@@ -14,6 +20,7 @@
   .ofd-card .sub { color: var(--body-quiet-color); font-size: 13px; margin-top: 4px; }
   .ofd-chart-wrap { border: 1px solid var(--hairline-color); border-radius: 8px; padding: 14px 16px; background: var(--body-bg); }
   .ofd-chart-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
+  .ofd-chart-wrap + .ofd-chart-wrap { margin-top: 16px; }
   .ofd-table-wrap { margin-top: 16px; }
   .ofd-table-wrap h2 { margin: 0 0 12px; font-size: 15px; color: var(--body-quiet-color); }
   .ofd-table-scroll { overflow-x: auto; }
@@ -35,18 +42,21 @@
 {% block content %}
 <div class="ofd-topbar">
   <h1>{{ title }}</h1>
-  <form class="ofd-range" method="get">
+  <form class="ofd-range" method="get" id="ofd-filter-form">
     <label>С <input type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></label>
     <label>По <input type="date" name="to" value="{{ date_to|date:'Y-m-d' }}"></label>
-    <label>Магазин
-      <select name="shop">
-        <option value="">Все магазины</option>
+    <details class="ofd-shop-picker">
+      <summary>Магазины: {% if selected_shops %}{{ selected_shops|length }} выбрано{% else %}Все{% endif %}</summary>
+      <div class="ofd-shop-picker-panel">
+        <label><input type="checkbox" id="ofd-shop-all"> Все магазины</label>
+        <hr>
         {% for shop in shops %}
-          <option value="{{ shop }}" {% if shop == selected_shop %}selected{% endif %}>{{ shop }}</option>
+          <label><input type="checkbox" name="shop" value="{{ shop }}" {% if shop in selected_shops %}checked{% endif %}> {{ shop }}</label>
         {% endfor %}
-      </select>
-    </label>
+      </div>
+    </details>
     <button type="submit" class="button">Показать</button>
+    <a href="print/?{{ request.GET.urlencode }}" target="_blank" class="button">Печать / PDF</a>
   </form>
 </div>
 
@@ -55,6 +65,7 @@
     <div class="label">Выручка</div>
     <div class="value">{{ summary.revenue_rub|floatformat:0 }} ₽</div>
   </div>
+  {% if show_split %}
   <div class="ofd-card">
     <div class="label">Наличные</div>
     <div class="value">{{ summary.cash_rub|floatformat:0 }} ₽</div>
@@ -65,11 +76,19 @@
     <div class="value">{{ summary.card_rub|floatformat:0 }} ₽</div>
     <div class="sub">{{ summary.card_share_pct|floatformat:1 }}% от выручки</div>
   </div>
+  {% endif %}
 </div>
 
+{% if show_split %}
 <div class="ofd-chart-wrap">
-  <h2>{% if selected_shop %}Выручка по дням: {{ selected_shop }}{% else %}Выручка по дням: все магазины{% endif %} (наличные / безналичные)</h2>
+  <h2>{% if selected_shops %}Выручка по дням: {{ selected_shops|join:", " }}{% else %}Выручка по дням: все магазины{% endif %} (наличные / безналичные)</h2>
   <canvas id="ofd-daily-chart" height="90"></canvas>
+</div>
+{% endif %}
+
+<div class="ofd-chart-wrap">
+  <h2>Выручка по дням: итого</h2>
+  <canvas id="ofd-daily-total-chart" height="90"></canvas>
 </div>
 
 <div class="ofd-table-wrap">
@@ -77,7 +96,7 @@
     Выручка по дням: магазины × дни, ₽
     {% if matrix_truncated %}<span class="sub">(последние 31 дн. выбранного периода — с {{ matrix_from|date:'d.m' }} по {{ date_to|date:'d.m' }})</span>{% endif %}
   </h2>
-  <div class="ofd-legend">Каждая ячейка: <strong>итого</strong> сверху, <span class="cash">наличные</span> / <span class="card">безналичные</span> снизу.</div>
+  {% if show_split %}<div class="ofd-legend">Каждая ячейка: <strong>итого</strong> сверху, <span class="cash">наличные</span> / <span class="card">безналичные</span> снизу.</div>{% endif %}
   <div class="ofd-table-scroll">
   <table class="ofd-table">
     <thead>
@@ -94,12 +113,12 @@
         {% for cell in row.cells %}
         <td class="num">
           <div class="cell-total">{{ cell.total_rub|floatformat:0 }}</div>
-          <div class="cell-split"><span class="cash">{{ cell.cash_rub|floatformat:0 }}</span> / <span class="card">{{ cell.card_rub|floatformat:0 }}</span></div>
+          {% if show_split %}<div class="cell-split"><span class="cash">{{ cell.cash_rub|floatformat:0 }}</span> / <span class="card">{{ cell.card_rub|floatformat:0 }}</span></div>{% endif %}
         </td>
         {% endfor %}
         <td class="num">
           <div class="cell-total">{{ row.total_rub|floatformat:0 }}</div>
-          <div class="cell-split"><span class="cash">{{ row.total_cash_rub|floatformat:0 }}</span> / <span class="card">{{ row.total_card_rub|floatformat:0 }}</span></div>
+          {% if show_split %}<div class="cell-split"><span class="cash">{{ row.total_cash_rub|floatformat:0 }}</span> / <span class="card">{{ row.total_card_rub|floatformat:0 }}</span></div>{% endif %}
         </td>
       </tr>
       {% empty %}
@@ -120,7 +139,11 @@
   const days = JSON.parse(document.getElementById('ofd-daily-days').textContent);
   const cash = JSON.parse(document.getElementById('ofd-daily-cash').textContent);
   const card = JSON.parse(document.getElementById('ofd-daily-card').textContent);
+  const total = cash.map((value, i) => value + card[i]);
+  const rubTick = (value) => `${value} ₽`;
+  const rubTooltip = (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} ₽`;
 
+  {% if show_split %}
   new Chart(document.getElementById('ofd-daily-chart'), {
     type: 'bar',
     data: {
@@ -134,13 +157,34 @@
       responsive: true,
       scales: {
         x: { stacked: true },
-        y: { stacked: true, ticks: { callback: (value) => `${value} ₽` } },
+        y: { stacked: true, ticks: { callback: rubTick } },
       },
-      plugins: {
-        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} ₽` } },
-      },
+      plugins: { tooltip: { callbacks: { label: rubTooltip } } },
     },
   });
+  {% endif %}
+
+  new Chart(document.getElementById('ofd-daily-total-chart'), {
+    type: 'line',
+    data: {
+      labels: days,
+      datasets: [
+        { label: 'Выручка', data: total, borderColor: '#9c27b0', backgroundColor: 'rgba(156,39,176,0.12)', fill: true, tension: 0.2 },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: { y: { ticks: { callback: rubTick } } },
+      plugins: { tooltip: { callbacks: { label: rubTooltip } } },
+    },
+  });
+
+  const allBox = document.getElementById('ofd-shop-all');
+  const shopBoxes = document.querySelectorAll('input[name="shop"]');
+  const syncAll = () => { allBox.checked = [...shopBoxes].every((box) => box.checked); };
+  allBox.addEventListener('change', () => shopBoxes.forEach((box) => { box.checked = allBox.checked; }));
+  shopBoxes.forEach((box) => box.addEventListener('change', syncAll));
+  syncAll();
 })();
 </script>
 {% endblock %}

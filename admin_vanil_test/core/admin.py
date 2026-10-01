@@ -811,10 +811,61 @@ def _parse_summary_range(request: HttpRequest) -> tuple[date, date]:
     return date_from, date_to
 
 
-@admin.register(OfdSummary)
-class OfdSummaryAdmin(admin.ModelAdmin):
-    """Read-only OFD revenue summary. Not a real editable entity — see
-    core.models.OfdSummary for why it's registered at all."""
+def _parse_selected_shops(request: HttpRequest, all_shops: list[str]) -> list[str]:
+    """Reads the checked `shop` checkboxes. Checking every shop means the
+    same thing as checking none — normalize to empty so "all shops" has one
+    representation instead of two that happen to produce the same query."""
+    selected = [shop for shop in request.GET.getlist('shop') if shop]
+    if selected and set(selected) >= set(all_shops):
+        return []
+    return selected
+
+
+def _build_report_context(request: HttpRequest, *, show_split: bool, cap_matrix: bool) -> dict[str, Any]:
+    """Shared data for both the on-screen report and its print view.
+
+    `cap_matrix=False` is for printing: the on-screen shops×days table is
+    capped to MAX_MATRIX_DAYS columns so it stays readable, but a printed
+    report should cover the whole selected range, however wide.
+    """
+    date_from, date_to = _parse_summary_range(request)
+    query_upper_bound = date_to + timedelta(days=1)  # date_to itself is inclusive
+    all_shops = ofd_analytics.get_shop_list()
+    selected_shops = _parse_selected_shops(request, all_shops)
+
+    summary = ofd_analytics.get_summary(date_from, query_upper_bound, selected_shops)
+    daily = ofd_analytics.get_daily_breakdown(date_from, query_upper_bound, selected_shops)
+
+    if cap_matrix:
+        matrix_from = max(date_from, date_to - timedelta(days=MAX_MATRIX_DAYS - 1))
+    else:
+        matrix_from = date_from
+    matrix = ofd_analytics.get_shop_day_matrix(matrix_from, query_upper_bound, selected_shops)
+
+    return {
+        "date_from": date_from,
+        "date_to": date_to,
+        "matrix_from": matrix_from,
+        "matrix_truncated": cap_matrix and matrix_from > date_from,
+        "shops": all_shops,
+        "selected_shops": selected_shops,
+        "summary": summary,
+        "daily_days": [point.day.isoformat() for point in daily],
+        "daily_cash": [point.cash_rub for point in daily],
+        "daily_card": [point.card_rub for point in daily],
+        "matrix": matrix,
+        "show_split": show_split,
+    }
+
+
+class _OfdReportAdminBase(admin.ModelAdmin):
+    """Shared behavior for the OFD report admin pages. Not real editable
+    entities — see the corresponding marker models in core.models for why
+    they're registered at all. Subclasses just set report_title/show_split.
+    """
+
+    report_title: str = ""
+    show_split: bool = True
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False
@@ -825,34 +876,47 @@ class OfdSummaryAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request: HttpRequest, obj: Any = None) -> bool:
         return False
 
+    def get_urls(self) -> list:
+        model_name = self.model._meta.model_name
+        custom = [
+            path(
+                'print/',
+                self.admin_site.admin_view(self.print_view),
+                name=f'{model_name}_print',
+            ),
+        ]
+        return custom + super().get_urls()
+
     def changelist_view(self, request: HttpRequest, extra_context: dict | None = None) -> HttpResponse:
         if not self.has_view_permission(request):
             raise PermissionDenied
 
-        date_from, date_to = _parse_summary_range(request)
-        query_upper_bound = date_to + timedelta(days=1)  # date_to itself is inclusive
-        selected_shop = request.GET.get('shop') or None
-
-        summary = ofd_analytics.get_summary(date_from, query_upper_bound, selected_shop)
-        daily = ofd_analytics.get_daily_breakdown(date_from, query_upper_bound, selected_shop)
-
-        matrix_from = max(date_from, date_to - timedelta(days=MAX_MATRIX_DAYS - 1))
-        matrix = ofd_analytics.get_shop_day_matrix(matrix_from, query_upper_bound, selected_shop)
-
         ctx = {
             **self.admin_site.each_context(request),
-            "title": "Отчет по выручке",
+            "title": self.report_title,
             "opts": self.model._meta,
-            "date_from": date_from,
-            "date_to": date_to,
-            "matrix_from": matrix_from,
-            "matrix_truncated": matrix_from > date_from,
-            "shops": ofd_analytics.get_shop_list(),
-            "selected_shop": selected_shop,
-            "summary": summary,
-            "daily_days": [point.day.isoformat() for point in daily],
-            "daily_cash": [point.cash_rub for point in daily],
-            "daily_card": [point.card_rub for point in daily],
-            "matrix": matrix,
+            **_build_report_context(request, show_split=self.show_split, cap_matrix=True),
         }
         return TemplateResponse(request, "admin/ofd/summary.html", ctx)
+
+    def print_view(self, request: HttpRequest) -> HttpResponse:
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+
+        ctx = {
+            "title": self.report_title,
+            **_build_report_context(request, show_split=self.show_split, cap_matrix=False),
+        }
+        return TemplateResponse(request, "admin/ofd/print.html", ctx)
+
+
+@admin.register(OfdSummary)
+class OfdSummaryAdmin(_OfdReportAdminBase):
+    report_title = "Отчет по выручке"
+    show_split = True
+
+
+@admin.register(OfdRevenueTotal)
+class OfdRevenueTotalAdmin(_OfdReportAdminBase):
+    report_title = "Отчет по выручке (итого)"
+    show_split = False

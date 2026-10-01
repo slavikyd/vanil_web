@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 1cm;
+        }
+        .header h1 {
+            font-size: 16px;
+            margin: 0 0 4px;
+        }
+        .header .range {
+            color: #555;
+            margin: 2px 0;
+        }
+        .summary {
+            display: flex;
+            gap: 32px;
+            margin: 16px 0;
+        }
+        .summary .label {
+            font-size: 10px;
+            color: #555;
+        }
+        .summary .value {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 3px 6px;
+        }
+        th {
+            background: #f0f0f0;
+            text-align: left;
+        }
+        td.num, th.num {
+            text-align: right;
+        }
+        .cell-split {
+            font-size: 9px;
+            color: #666;
+        }
+        @media print {
+            @page {
+                margin: 0.5cm;
+            }
+            body {
+                font-size: 9px;
+                margin: 0;
+                padding: 0;
+            }
+            table {
+                page-break-inside: auto;
+            }
+            tr {
+                page-break-inside: avoid;
+            }
+            th, td {
+                padding: 2px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>{{ title }}</h1>
+    <div class="range">
+        Период: {{ date_from|date:'d.m.Y' }} — {{ date_to|date:'d.m.Y' }}
+        · Магазины: {% if selected_shops %}{{ selected_shops|join:", " }}{% else %}все{% endif %}
+    </div>
+    <div class="range">Сформировано: {% now "d.m.Y H:i" %}</div>
+</div>
+
+<div class="summary">
+    <div>
+        <div class="label">Выручка</div>
+        <div class="value">{{ summary.revenue_rub|floatformat:0 }} ₽</div>
+    </div>
+    {% if show_split %}
+    <div>
+        <div class="label">Наличные</div>
+        <div class="value">{{ summary.cash_rub|floatformat:0 }} ₽ ({{ summary.cash_share_pct|floatformat:1 }}%)</div>
+    </div>
+    <div>
+        <div class="label">Безналичные</div>
+        <div class="value">{{ summary.card_rub|floatformat:0 }} ₽ ({{ summary.card_share_pct|floatformat:1 }}%)</div>
+    </div>
+    {% endif %}
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Магазин</th>
+            {% for day in matrix.days %}<th class="num">{{ day|date:'d.m' }}</th>{% endfor %}
+            <th class="num">Итого</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in matrix.rows %}
+        <tr>
+            <td>{{ row.shop }}</td>
+            {% for cell in row.cells %}
+            <td class="num">
+                {{ cell.total_rub|floatformat:0 }}
+                {% if show_split %}<div class="cell-split">{{ cell.cash_rub|floatformat:0 }} / {{ cell.card_rub|floatformat:0 }}</div>{% endif %}
+            </td>
+            {% endfor %}
+            <td class="num">
+                <strong>{{ row.total_rub|floatformat:0 }}</strong>
+                {% if show_split %}<div class="cell-split">{{ row.total_cash_rub|floatformat:0 }} / {{ row.total_card_rub|floatformat:0 }}</div>{% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td>Нет данных за выбранный период.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+<script>window.print();</script>
+</body>
+</html>
