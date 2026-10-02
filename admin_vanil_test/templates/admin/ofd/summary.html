@@ -63,18 +63,18 @@
 <div class="ofd-cards">
   <div class="ofd-card">
     <div class="label">Выручка</div>
-    <div class="value">{{ summary.revenue_rub|floatformat:0 }} ₽</div>
+    <div class="value">{{ summary.revenue_rub|floatformat:2 }} ₽</div>
   </div>
   {% if show_split %}
   <div class="ofd-card">
     <div class="label">Наличные</div>
-    <div class="value">{{ summary.cash_rub|floatformat:0 }} ₽</div>
-    <div class="sub">{{ summary.cash_share_pct|floatformat:1 }}% от выручки</div>
+    <div class="value">{{ summary.cash_rub|floatformat:2 }} ₽</div>
+    <div class="sub">{{ summary.cash_share_pct|floatformat:2 }}% от выручки</div>
   </div>
   <div class="ofd-card">
     <div class="label">Безналичные (карты)</div>
-    <div class="value">{{ summary.card_rub|floatformat:0 }} ₽</div>
-    <div class="sub">{{ summary.card_share_pct|floatformat:1 }}% от выручки</div>
+    <div class="value">{{ summary.card_rub|floatformat:2 }} ₽</div>
+    <div class="sub">{{ summary.card_share_pct|floatformat:2 }}% от выручки</div>
   </div>
   {% endif %}
 </div>
@@ -112,13 +112,13 @@
         <td>{{ row.shop }}</td>
         {% for cell in row.cells %}
         <td class="num">
-          <div class="cell-total">{{ cell.total_rub|floatformat:0 }}</div>
-          {% if show_split %}<div class="cell-split"><span class="cash">{{ cell.cash_rub|floatformat:0 }}</span> / <span class="card">{{ cell.card_rub|floatformat:0 }}</span></div>{% endif %}
+          <div class="cell-total">{{ cell.total_rub|floatformat:2 }}</div>
+          {% if show_split %}<div class="cell-split"><span class="cash">{{ cell.cash_rub|floatformat:2 }}</span> / <span class="card">{{ cell.card_rub|floatformat:2 }}</span></div>{% endif %}
         </td>
         {% endfor %}
         <td class="num">
-          <div class="cell-total">{{ row.total_rub|floatformat:0 }}</div>
-          {% if show_split %}<div class="cell-split"><span class="cash">{{ row.total_cash_rub|floatformat:0 }}</span> / <span class="card">{{ row.total_card_rub|floatformat:0 }}</span></div>{% endif %}
+          <div class="cell-total">{{ row.total_rub|floatformat:2 }}</div>
+          {% if show_split %}<div class="cell-split"><span class="cash">{{ row.total_cash_rub|floatformat:2 }}</span> / <span class="card">{{ row.total_card_rub|floatformat:2 }}</span></div>{% endif %}
         </td>
       </tr>
       {% empty %}
@@ -132,6 +132,8 @@
 {{ daily_days|json_script:"ofd-daily-days" }}
 {{ daily_cash|json_script:"ofd-daily-cash" }}
 {{ daily_card|json_script:"ofd-daily-card" }}
+{{ matrix_day_labels|json_script:"ofd-matrix-days" }}
+{{ matrix_shop_series|json_script:"ofd-matrix-series" }}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
@@ -139,9 +141,16 @@
   const days = JSON.parse(document.getElementById('ofd-daily-days').textContent);
   const cash = JSON.parse(document.getElementById('ofd-daily-cash').textContent);
   const card = JSON.parse(document.getElementById('ofd-daily-card').textContent);
-  const total = cash.map((value, i) => value + card[i]);
-  const rubTick = (value) => `${value} ₽`;
-  const rubTooltip = (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} ₽`;
+  const matrixDays = JSON.parse(document.getElementById('ofd-matrix-days').textContent);
+  const matrixSeries = JSON.parse(document.getElementById('ofd-matrix-series').textContent);
+  const rubTick = (value) => `${value.toFixed(2)} ₽`;
+  const rubTooltip = (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} ₽`;
+  // Cycled per shop; distinct from each other, repeats only past this many shops.
+  const PALETTE = [
+    '#1565c0', '#2e7d32', '#e65100', '#6a1b9a', '#ad1457', '#00838f',
+    '#9e9d24', '#4e342e', '#283593', '#c62828', '#00695c', '#8e24aa',
+    '#37474f', '#f9a825', '#3949ab', '#558b2f', '#d84315', '#6d4c41',
+  ];
 
   {% if show_split %}
   new Chart(document.getElementById('ofd-daily-chart'), {
@@ -167,10 +176,16 @@
   new Chart(document.getElementById('ofd-daily-total-chart'), {
     type: 'line',
     data: {
-      labels: days,
-      datasets: [
-        { label: 'Выручка', data: total, borderColor: '#9c27b0', backgroundColor: 'rgba(156,39,176,0.12)', fill: true, tension: 0.2 },
-      ],
+      labels: matrixDays,
+      datasets: matrixSeries.map((series, i) => ({
+        label: series.shop,
+        data: series.values,
+        borderColor: PALETTE[i % PALETTE.length],
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.2,
+        pointRadius: 2,
+      })),
     },
     options: {
       responsive: true,

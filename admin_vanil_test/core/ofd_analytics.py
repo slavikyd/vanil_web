@@ -37,14 +37,26 @@ _SHOP_LIST_SQL = f"""
     ORDER BY 1
 """
 
+# total_kop includes amounts already collected as an advance on an earlier
+# receipt (prepaid_kop) — counting it again here double-counts that advance
+# against the receipt where it was first collected. paid_kop = total_kop -
+# prepaid_kop is the amount actually paid *on this receipt*. A fully-prepaid
+# receipt (paid_kop = 0) is still a real sale and must still be counted —
+# the zero filter below only drops genuinely empty documents (raw
+# total_kop = 0: shift-open/close reports), never anything based on the
+# post-subtraction amount.
+_PAID_EXPR = "(r.total_kop - r.prepaid_kop)"
+_ZERO_RECEIPT_FILTER = "AND r.total_kop <> 0"
+
 _SUMMARY_SQL = f"""
     SELECT
-        coalesce(sum(r.total_kop), 0) AS total_kop,
+        coalesce(sum({_PAID_EXPR}), 0) AS paid_kop,
         coalesce(sum(r.cash_kop), 0) AS cash_kop,
         coalesce(sum(r.ecash_kop), 0) AS ecash_kop
     FROM ofd.receipts r
     {_SHOP_JOIN}
     WHERE r.operation_type = 1
+      {_ZERO_RECEIPT_FILTER}
       AND r.date >= %s
       AND r.date < %s
       {{shop_filter}}
@@ -58,6 +70,7 @@ _DAILY_SQL = f"""
     FROM ofd.receipts r
     {_SHOP_JOIN}
     WHERE r.operation_type = 1
+      {_ZERO_RECEIPT_FILTER}
       AND r.date >= %s
       AND r.date < %s
       {{shop_filter}}
@@ -69,12 +82,13 @@ _SHOP_DAY_MATRIX_SQL = f"""
     SELECT
         r.date,
         {_SHOP_EXPR} AS shop,
-        coalesce(sum(r.total_kop), 0) AS total_kop,
+        coalesce(sum({_PAID_EXPR}), 0) AS paid_kop,
         coalesce(sum(r.cash_kop), 0) AS cash_kop,
         coalesce(sum(r.ecash_kop), 0) AS ecash_kop
     FROM ofd.receipts r
     {_SHOP_JOIN}
     WHERE r.operation_type = 1
+      {_ZERO_RECEIPT_FILTER}
       AND r.date >= %s
       AND r.date < %s
       {{shop_filter}}
@@ -153,24 +167,24 @@ def get_summary(date_from: date, date_to: date, shops: list[str] | None = None) 
 
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
-        total_kop, cash_kop, ecash_kop = cursor.fetchone()
+        paid_kop, cash_kop, ecash_kop = cursor.fetchone()
 
     # sum() over a bigint column comes back as numeric, which psycopg2 maps
     # to Decimal — cast to float so this matches the declared field types
     # and can be mixed freely with plain floats elsewhere.
-    total_kop, cash_kop, ecash_kop = float(total_kop), float(cash_kop), float(ecash_kop)
+    paid_kop, cash_kop, ecash_kop = float(paid_kop), float(cash_kop), float(ecash_kop)
 
-    if not total_kop:
+    if not paid_kop:
         return SummaryTotals(
             revenue_rub=0.0, cash_rub=0.0, cash_share_pct=0.0, card_rub=0.0, card_share_pct=0.0,
         )
 
     return SummaryTotals(
-        revenue_rub=total_kop / 100,
+        revenue_rub=paid_kop / 100,
         cash_rub=cash_kop / 100,
-        cash_share_pct=cash_kop * 100 / total_kop,
+        cash_share_pct=cash_kop * 100 / paid_kop,
         card_rub=ecash_kop / 100,
-        card_share_pct=ecash_kop * 100 / total_kop,
+        card_share_pct=ecash_kop * 100 / paid_kop,
     )
 
 
@@ -198,14 +212,14 @@ def get_shop_day_matrix(date_from: date, date_to: date, shops: list[str] | None 
         cursor.execute(sql, params)
         rows = cursor.fetchall()
 
-    days = sorted({day for day, _shop, _total, _cash, _ecash in rows})
+    days = sorted({day for day, _shop, _paid, _cash, _ecash in rows})
     day_index = {day: position for position, day in enumerate(days)}
     empty_cell = DayCell(total_rub=0.0, cash_rub=0.0, card_rub=0.0)
 
     cells_by_shop: dict[str, list[DayCell]] = {}
-    for day, shop_name, total_kop, cash_kop, ecash_kop in rows:
+    for day, shop_name, paid_kop, cash_kop, ecash_kop in rows:
         cell = DayCell(
-            total_rub=float(total_kop) / 100,
+            total_rub=float(paid_kop) / 100,
             cash_rub=float(cash_kop) / 100,
             card_rub=float(ecash_kop) / 100,
         )

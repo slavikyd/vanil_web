@@ -3,6 +3,7 @@ import asyncio
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
@@ -800,6 +801,11 @@ class ShopsGroupsAdmin(admin.ModelAdmin):
 DEFAULT_SUMMARY_RANGE_DAYS = 7
 MAX_MATRIX_DAYS = 31  # the shops×days table stops being readable past ~a month of columns
 
+# The business runs on Europe/Saratov (UTC+4); Django's own TIME_ZONE
+# setting is Europe/Moscow (UTC+3) for the rest of the admin. Anything we
+# display "as of now" here should use the shop's own clock, not Django's.
+OFD_TZ = ZoneInfo('Europe/Saratov')
+
 
 def _parse_summary_range(request: HttpRequest) -> tuple[date, date]:
     """Reads ?from=&to= as an inclusive day range, defaulting to the last 7 days."""
@@ -854,6 +860,11 @@ def _build_report_context(request: HttpRequest, *, show_split: bool, cap_matrix:
         "daily_cash": [point.cash_rub for point in daily],
         "daily_card": [point.card_rub for point in daily],
         "matrix": matrix,
+        "matrix_day_labels": [day.strftime('%d.%m') for day in matrix.days],
+        "matrix_shop_series": [
+            {"shop": row.shop, "values": [cell.total_rub for cell in row.cells]}
+            for row in matrix.rows
+        ],
         "show_split": show_split,
     }
 
@@ -905,6 +916,7 @@ class _OfdReportAdminBase(admin.ModelAdmin):
 
         ctx = {
             "title": self.report_title,
+            "generated_at": timezone.now().astimezone(OFD_TZ),
             **_build_report_context(request, show_split=self.show_split, cap_matrix=False),
         }
         return TemplateResponse(request, "admin/ofd/print.html", ctx)
