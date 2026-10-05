@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from datetime import date, datetime, timedelta
+from functools import partial
 from io import BytesIO
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -799,7 +800,13 @@ class ShopsGroupsAdmin(admin.ModelAdmin):
 
 
 DEFAULT_SUMMARY_RANGE_DAYS = 7
-MAX_MATRIX_DAYS = 31  # the shops×days table stops being readable past ~a month of columns
+MAX_MATRIX_PERIODS = 31  # the shops×periods table stops being readable past ~a month of daily columns
+
+# "Авто" grouping picks the bucket size from the range length: days for up to
+# a month, months for up to ~3 years, years beyond that.
+AUTO_GROUP = 'auto'
+AUTO_DAILY_MAX_DAYS = 31
+AUTO_MONTHLY_MAX_DAYS = 3 * 366
 
 # The business runs on Europe/Saratov (UTC+4); Django's own TIME_ZONE
 # setting is Europe/Moscow (UTC+3) for the rest of the admin. Anything we
@@ -827,40 +834,83 @@ def _parse_selected_shops(request: HttpRequest, all_shops: list[str]) -> list[st
     return selected
 
 
+def _parse_granularity(
+    request: HttpRequest,
+    date_from: date,
+    date_to: date,
+) -> tuple[str, ofd_analytics.Granularity]:
+    """Reads ?group=. Returns the raw choice (a granularity key or 'auto') and
+    the granularity to actually use. 'auto' — also the fallback for a missing
+    or unknown value — picks the bucket size from the range length."""
+    choice = request.GET.get('group') or AUTO_GROUP
+    if choice in ofd_analytics.GRANULARITY_BY_KEY:
+        return choice, ofd_analytics.GRANULARITY_BY_KEY[choice]
+
+    days_in_range = (date_to - date_from).days + 1
+    if days_in_range <= AUTO_DAILY_MAX_DAYS:
+        key = 'day'
+    elif days_in_range <= AUTO_MONTHLY_MAX_DAYS:
+        key = 'month'
+    else:
+        key = 'year'
+    return AUTO_GROUP, ofd_analytics.GRANULARITY_BY_KEY[key]
+
+
+def _period_label(start: date, granularity: ofd_analytics.Granularity, *, multi_year: bool) -> str:
+    """Column/axis label for the period starting on `start`. Day and week
+    labels carry the year only when the range spans several, to stay short."""
+    if granularity.key == 'year':
+        return start.strftime('%Y')
+    if granularity.key == 'month':
+        return start.strftime('%m.%Y')
+    prefix = 'нед. ' if granularity.key == 'week' else ''
+    return prefix + start.strftime('%d.%m.%y' if multi_year else '%d.%m')
+
+
 def _build_report_context(request: HttpRequest, *, show_split: bool, cap_matrix: bool) -> dict[str, Any]:
     """Shared data for both the on-screen report and its print view.
 
-    `cap_matrix=False` is for printing: the on-screen shops×days table is
-    capped to MAX_MATRIX_DAYS columns so it stays readable, but a printed
+    `cap_matrix=False` is for printing: the on-screen shops×periods table is
+    capped to MAX_MATRIX_PERIODS columns so it stays readable, but a printed
     report should cover the whole selected range, however wide.
     """
     date_from, date_to = _parse_summary_range(request)
     query_upper_bound = date_to + timedelta(days=1)  # date_to itself is inclusive
     all_shops = ofd_analytics.get_shop_list()
     selected_shops = _parse_selected_shops(request, all_shops)
+    group_choice, granularity = _parse_granularity(request, date_from, date_to)
+    label_of = partial(_period_label, granularity=granularity, multi_year=date_from.year != date_to.year)
 
     summary = ofd_analytics.get_summary(date_from, query_upper_bound, selected_shops)
-    daily = ofd_analytics.get_daily_breakdown(date_from, query_upper_bound, selected_shops)
+    periods = ofd_analytics.get_period_breakdown(date_from, query_upper_bound, granularity, selected_shops)
 
     if cap_matrix:
-        matrix_from = max(date_from, date_to - timedelta(days=MAX_MATRIX_DAYS - 1))
+        capped_start = ofd_analytics.earliest_period_start(date_to, granularity, MAX_MATRIX_PERIODS)
+        matrix_from = max(date_from, capped_start)
     else:
         matrix_from = date_from
-    matrix = ofd_analytics.get_shop_day_matrix(matrix_from, query_upper_bound, selected_shops)
+    matrix = ofd_analytics.get_shop_period_matrix(matrix_from, query_upper_bound, granularity, selected_shops)
+
+    group_choices = [(AUTO_GROUP, f'Авто ({granularity.menu.lower()})' if group_choice == AUTO_GROUP else 'Авто')]
+    group_choices += [(option.key, option.menu) for option in ofd_analytics.GRANULARITIES]
 
     return {
         "date_from": date_from,
         "date_to": date_to,
         "matrix_from": matrix_from,
         "matrix_truncated": cap_matrix and matrix_from > date_from,
+        "max_matrix_periods": MAX_MATRIX_PERIODS,
         "shops": all_shops,
         "selected_shops": selected_shops,
+        "granularity": granularity,
+        "group_choice": group_choice,
+        "group_choices": group_choices,
         "summary": summary,
-        "daily_days": [point.day.isoformat() for point in daily],
-        "daily_cash": [point.cash_rub for point in daily],
-        "daily_card": [point.card_rub for point in daily],
+        "period_labels": [label_of(point.start) for point in periods],
+        "period_cash": [point.cash_rub for point in periods],
+        "period_card": [point.card_rub for point in periods],
         "matrix": matrix,
-        "matrix_day_labels": [day.strftime('%d.%m') for day in matrix.days],
+        "matrix_period_labels": [label_of(start) for start in matrix.periods],
         "matrix_shop_series": [
             {"shop": row.shop, "values": [cell.total_rub for cell in row.cells]}
             for row in matrix.rows

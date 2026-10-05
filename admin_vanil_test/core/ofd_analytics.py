@@ -15,13 +15,39 @@ An optional `shops` list narrows every query to just those shops (matched
 the same way the Grafana dashboards do: the shop's address, or "ККТ
 <register id>" for a register with no shop linked yet) — `None`/empty
 means all shops.
+
+The per-period queries bucket receipt dates by a `Granularity` (day, week,
+month or year) so a long range can be viewed at a readable resolution.
+Buckets are clipped to the requested range: a range starting mid-month
+yields a first "month" holding only the days from the range start.
 """
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from django.db import connection
+
+MONTHS_IN_YEAR = 12
+
+
+@dataclass(frozen=True)
+class Granularity:
+    """One way of bucketing receipt dates for the charts and the pivot table."""
+
+    key: str  # doubles as the `date_trunc` unit and the `?group=` value
+    menu: str  # dropdown entry
+    by_phrase: str  # completes "Выручка по ..."
+    columns_phrase: str  # completes "магазины × ..."
+
+
+GRANULARITIES = (
+    Granularity("day", "По дням", "дням", "дни"),
+    Granularity("week", "По неделям", "неделям", "недели"),
+    Granularity("month", "По месяцам", "месяцам", "месяцы"),
+    Granularity("year", "По годам", "годам", "годы"),
+)
+GRANULARITY_BY_KEY = {granularity.key: granularity for granularity in GRANULARITIES}
 
 _SHOP_EXPR = "coalesce(sh.address, 'ККТ ' || reg.kkt_reg_id)"
 _SHOP_JOIN = """
@@ -62,9 +88,9 @@ _SUMMARY_SQL = f"""
       {{shop_filter}}
 """
 
-_DAILY_SQL = f"""
+_PERIOD_SQL = f"""
     SELECT
-        r.date,
+        {{bucket}} AS period_start,
         coalesce(sum(r.cash_kop), 0) AS cash_kop,
         coalesce(sum(r.ecash_kop), 0) AS ecash_kop
     FROM ofd.receipts r
@@ -74,13 +100,13 @@ _DAILY_SQL = f"""
       AND r.date >= %s
       AND r.date < %s
       {{shop_filter}}
-    GROUP BY r.date
-    ORDER BY r.date
+    GROUP BY 1
+    ORDER BY 1
 """
 
-_SHOP_DAY_MATRIX_SQL = f"""
+_SHOP_PERIOD_MATRIX_SQL = f"""
     SELECT
-        r.date,
+        {{bucket}} AS period_start,
         {_SHOP_EXPR} AS shop,
         coalesce(sum({_PAID_EXPR}), 0) AS paid_kop,
         coalesce(sum(r.cash_kop), 0) AS cash_kop,
@@ -92,8 +118,8 @@ _SHOP_DAY_MATRIX_SQL = f"""
       AND r.date >= %s
       AND r.date < %s
       {{shop_filter}}
-    GROUP BY r.date, shop
-    ORDER BY r.date, shop
+    GROUP BY 1, 2
+    ORDER BY 1, 2
 """
 
 
@@ -109,17 +135,17 @@ class SummaryTotals:
 
 
 @dataclass(frozen=True)
-class DailyPoint:
-    """One day's cash and card revenue, in rubles."""
+class PeriodPoint:
+    """One period's cash and card revenue, in rubles."""
 
-    day: date
+    start: date
     cash_rub: float
     card_rub: float
 
 
 @dataclass(frozen=True)
-class DayCell:
-    """One shop's total/cash/card revenue on one day."""
+class PeriodCell:
+    """One shop's total/cash/card revenue in one period."""
 
     total_rub: float
     cash_rub: float
@@ -127,30 +153,70 @@ class DayCell:
 
 
 @dataclass(frozen=True)
-class ShopDayMatrixRow:
-    """One shop's revenue for each day in the matrix, aligned with days."""
+class ShopPeriodMatrixRow:
+    """One shop's revenue for each period in the matrix, aligned with periods."""
 
     shop: str
-    cells: list[DayCell]
+    cells: list[PeriodCell]
     total_rub: float
     total_cash_rub: float
     total_card_rub: float
 
 
 @dataclass(frozen=True)
-class ShopDayMatrix:
-    """Revenue pivoted: shops as rows, days as columns."""
+class ShopPeriodMatrix:
+    """Revenue pivoted: shops as rows, periods (period start dates) as columns."""
 
-    days: list[date]
-    rows: list[ShopDayMatrixRow]
+    periods: list[date]
+    rows: list[ShopPeriodMatrixRow]
 
 
-def _with_shop_filter(sql_template: str, shops: list[str] | None, params: list[Any]) -> str:
-    """Fills in the {shop_filter} placeholder, appending `shops` to params if set."""
+def period_start(day: date, granularity: Granularity) -> date:
+    """First day of the bucket `day` falls in (weeks start Monday, like Postgres)."""
+    if granularity.key == "week":
+        return day - timedelta(days=day.weekday())
+    if granularity.key == "month":
+        return day.replace(day=1)
+    if granularity.key == "year":
+        return day.replace(month=1, day=1)
+    return day
+
+
+def earliest_period_start(last_day: date, granularity: Granularity, periods: int) -> date:
+    """Start of the bucket `periods - 1` buckets before the one holding `last_day`."""
+    steps_back = periods - 1
+    current = period_start(last_day, granularity)
+    if granularity.key == "week":
+        return current - timedelta(weeks=steps_back)
+    if granularity.key == "month":
+        months_total = current.year * MONTHS_IN_YEAR + current.month - 1 - steps_back
+        year, month_index = divmod(months_total, MONTHS_IN_YEAR)
+        return date(year, month_index + 1, 1)
+    if granularity.key == "year":
+        return date(current.year - steps_back, 1, 1)
+    return current - timedelta(days=steps_back)
+
+
+def _bucket_sql(granularity: Granularity) -> str:
+    """SQL expression for the bucket start date. The unit is interpolated, not
+    bound, so it must be one of ours — never anything caller-supplied."""
+    if GRANULARITY_BY_KEY.get(granularity.key) != granularity:
+        raise ValueError(f"Unsupported granularity: {granularity!r}")
+    return f"date_trunc('{granularity.key}', r.date::timestamp)::date"
+
+
+def _fill_template(
+    sql_template: str,
+    shops: list[str] | None,
+    params: list[Any],
+    bucket: str = "",
+) -> str:
+    """Fills the {shop_filter} and {bucket} placeholders, appending `shops` to
+    params if set."""
     if not shops:
-        return sql_template.format(shop_filter="")
+        return sql_template.format(shop_filter="", bucket=bucket)
     params.append(shops)
-    return sql_template.format(shop_filter=_SHOP_FILTER_CLAUSE)
+    return sql_template.format(shop_filter=_SHOP_FILTER_CLAUSE, bucket=bucket)
 
 
 def get_shop_list() -> list[str]:
@@ -163,7 +229,7 @@ def get_shop_list() -> list[str]:
 def get_summary(date_from: date, date_to: date, shops: list[str] | None = None) -> SummaryTotals:
     """Revenue and cash/card share for receipt dates in [date_from, date_to)."""
     params: list[Any] = [date_from, date_to]
-    sql = _with_shop_filter(_SUMMARY_SQL, shops, params)
+    sql = _fill_template(_SUMMARY_SQL, shops, params)
 
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
@@ -188,45 +254,55 @@ def get_summary(date_from: date, date_to: date, shops: list[str] | None = None) 
     )
 
 
-def get_daily_breakdown(date_from: date, date_to: date, shops: list[str] | None = None) -> list[DailyPoint]:
-    """Per-day cash/card revenue for receipt dates in [date_from, date_to)."""
+def get_period_breakdown(
+    date_from: date,
+    date_to: date,
+    granularity: Granularity,
+    shops: list[str] | None = None,
+) -> list[PeriodPoint]:
+    """Per-period cash/card revenue for receipt dates in [date_from, date_to)."""
     params: list[Any] = [date_from, date_to]
-    sql = _with_shop_filter(_DAILY_SQL, shops, params)
+    sql = _fill_template(_PERIOD_SQL, shops, params, bucket=_bucket_sql(granularity))
 
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
         rows = cursor.fetchall()
 
     return [
-        DailyPoint(day=day, cash_rub=float(cash_kop) / 100, card_rub=float(ecash_kop) / 100)
-        for day, cash_kop, ecash_kop in rows
+        PeriodPoint(start=start, cash_rub=float(cash_kop) / 100, card_rub=float(ecash_kop) / 100)
+        for start, cash_kop, ecash_kop in rows
     ]
 
 
-def get_shop_day_matrix(date_from: date, date_to: date, shops: list[str] | None = None) -> ShopDayMatrix:
-    """Revenue per shop per day for [date_from, date_to), pivoted for display."""
+def get_shop_period_matrix(
+    date_from: date,
+    date_to: date,
+    granularity: Granularity,
+    shops: list[str] | None = None,
+) -> ShopPeriodMatrix:
+    """Revenue per shop per period for [date_from, date_to), pivoted for display."""
     params: list[Any] = [date_from, date_to]
-    sql = _with_shop_filter(_SHOP_DAY_MATRIX_SQL, shops, params)
+    sql = _fill_template(_SHOP_PERIOD_MATRIX_SQL, shops, params, bucket=_bucket_sql(granularity))
 
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
         rows = cursor.fetchall()
 
-    days = sorted({day for day, _shop, _paid, _cash, _ecash in rows})
-    day_index = {day: position for position, day in enumerate(days)}
-    empty_cell = DayCell(total_rub=0.0, cash_rub=0.0, card_rub=0.0)
+    periods = sorted({start for start, _shop, _paid, _cash, _ecash in rows})
+    period_index = {start: position for position, start in enumerate(periods)}
+    empty_cell = PeriodCell(total_rub=0.0, cash_rub=0.0, card_rub=0.0)
 
-    cells_by_shop: dict[str, list[DayCell]] = {}
-    for day, shop_name, paid_kop, cash_kop, ecash_kop in rows:
-        cell = DayCell(
+    cells_by_shop: dict[str, list[PeriodCell]] = {}
+    for start, shop_name, paid_kop, cash_kop, ecash_kop in rows:
+        cell = PeriodCell(
             total_rub=float(paid_kop) / 100,
             cash_rub=float(cash_kop) / 100,
             card_rub=float(ecash_kop) / 100,
         )
-        cells_by_shop.setdefault(shop_name, [empty_cell] * len(days))[day_index[day]] = cell
+        cells_by_shop.setdefault(shop_name, [empty_cell] * len(periods))[period_index[start]] = cell
 
     matrix_rows = [
-        ShopDayMatrixRow(
+        ShopPeriodMatrixRow(
             shop=shop_name,
             cells=cells,
             total_rub=sum(cell.total_rub for cell in cells),
@@ -235,4 +311,4 @@ def get_shop_day_matrix(date_from: date, date_to: date, shops: list[str] | None 
         )
         for shop_name, cells in sorted(cells_by_shop.items())
     ]
-    return ShopDayMatrix(days=days, rows=matrix_rows)
+    return ShopPeriodMatrix(periods=periods, rows=matrix_rows)

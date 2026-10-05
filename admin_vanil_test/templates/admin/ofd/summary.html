@@ -6,7 +6,7 @@
   .ofd-topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin: 12px 0; }
   .ofd-topbar h1 { margin: 0; font-size: 20px; }
   .ofd-range { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .ofd-range input[type="date"] { padding: 4px 6px; }
+  .ofd-range input[type="date"], .ofd-range select { padding: 4px 6px; }
   .ofd-shop-picker { position: relative; }
   .ofd-shop-picker summary { cursor:pointer; border:1px solid var(--hairline-color); border-radius:4px; padding:5px 10px; list-style:none; }
   .ofd-shop-picker summary::-webkit-details-marker { display:none; }
@@ -55,6 +55,11 @@
         {% endfor %}
       </div>
     </details>
+    <label>Группировка
+      <select name="group">
+        {% for value, label in group_choices %}<option value="{{ value }}" {% if value == group_choice %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
     <button type="submit" class="button">Показать</button>
     <a href="print/?{{ request.GET.urlencode }}" target="_blank" class="button">Печать / PDF</a>
   </form>
@@ -63,17 +68,17 @@
 <div class="ofd-cards">
   <div class="ofd-card">
     <div class="label">Выручка</div>
-    <div class="value">{{ summary.revenue_rub|floatformat:2 }} ₽</div>
+    <div class="value">{{ summary.revenue_rub|floatformat:"2g" }} ₽</div>
   </div>
   {% if show_split %}
   <div class="ofd-card">
     <div class="label">Наличные</div>
-    <div class="value">{{ summary.cash_rub|floatformat:2 }} ₽</div>
+    <div class="value">{{ summary.cash_rub|floatformat:"2g" }} ₽</div>
     <div class="sub">{{ summary.cash_share_pct|floatformat:2 }}% от выручки</div>
   </div>
   <div class="ofd-card">
     <div class="label">Безналичные (карты)</div>
-    <div class="value">{{ summary.card_rub|floatformat:2 }} ₽</div>
+    <div class="value">{{ summary.card_rub|floatformat:"2g" }} ₽</div>
     <div class="sub">{{ summary.card_share_pct|floatformat:2 }}% от выручки</div>
   </div>
   {% endif %}
@@ -81,20 +86,20 @@
 
 {% if show_split %}
 <div class="ofd-chart-wrap">
-  <h2>{% if selected_shops %}Выручка по дням: {{ selected_shops|join:", " }}{% else %}Выручка по дням: все магазины{% endif %} (наличные / безналичные)</h2>
-  <canvas id="ofd-daily-chart" height="90"></canvas>
+  <h2>{% if selected_shops %}Выручка по {{ granularity.by_phrase }}: {{ selected_shops|join:", " }}{% else %}Выручка по {{ granularity.by_phrase }}: все магазины{% endif %} (наличные / безналичные)</h2>
+  <canvas id="ofd-period-chart" height="90"></canvas>
 </div>
 {% endif %}
 
 <div class="ofd-chart-wrap">
-  <h2>Выручка по дням: итого</h2>
-  <canvas id="ofd-daily-total-chart" height="90"></canvas>
+  <h2>Выручка по {{ granularity.by_phrase }}: итого</h2>
+  <canvas id="ofd-period-total-chart" height="90"></canvas>
 </div>
 
 <div class="ofd-table-wrap">
   <h2>
-    Выручка по дням: магазины × дни, ₽
-    {% if matrix_truncated %}<span class="sub">(последние 31 дн. выбранного периода — с {{ matrix_from|date:'d.m' }} по {{ date_to|date:'d.m' }})</span>{% endif %}
+    Выручка по {{ granularity.by_phrase }}: магазины × {{ granularity.columns_phrase }}, ₽
+    {% if matrix_truncated %}<span class="sub">(последние {{ max_matrix_periods }} период выбранного диапазона — с {{ matrix_from|date:'d.m.Y' }} по {{ date_to|date:'d.m.Y' }})</span>{% endif %}
   </h2>
   {% if show_split %}<div class="ofd-legend">Каждая ячейка: <strong>итого</strong> сверху, <span class="cash">наличные</span> / <span class="card">безналичные</span> снизу.</div>{% endif %}
   <div class="ofd-table-scroll">
@@ -102,7 +107,7 @@
     <thead>
       <tr>
         <th>Магазин</th>
-        {% for day in matrix.days %}<th class="num">{{ day|date:'d.m' }}</th>{% endfor %}
+        {% for label in matrix_period_labels %}<th class="num">{{ label }}</th>{% endfor %}
         <th class="num">Итого</th>
       </tr>
     </thead>
@@ -112,13 +117,13 @@
         <td>{{ row.shop }}</td>
         {% for cell in row.cells %}
         <td class="num">
-          <div class="cell-total">{{ cell.total_rub|floatformat:2 }}</div>
-          {% if show_split %}<div class="cell-split"><span class="cash">{{ cell.cash_rub|floatformat:2 }}</span> / <span class="card">{{ cell.card_rub|floatformat:2 }}</span></div>{% endif %}
+          <div class="cell-total">{{ cell.total_rub|floatformat:"2g" }}</div>
+          {% if show_split %}<div class="cell-split"><span class="cash">{{ cell.cash_rub|floatformat:"2g" }}</span> / <span class="card">{{ cell.card_rub|floatformat:"2g" }}</span></div>{% endif %}
         </td>
         {% endfor %}
         <td class="num">
-          <div class="cell-total">{{ row.total_rub|floatformat:2 }}</div>
-          {% if show_split %}<div class="cell-split"><span class="cash">{{ row.total_cash_rub|floatformat:2 }}</span> / <span class="card">{{ row.total_card_rub|floatformat:2 }}</span></div>{% endif %}
+          <div class="cell-total">{{ row.total_rub|floatformat:"2g" }}</div>
+          {% if show_split %}<div class="cell-split"><span class="cash">{{ row.total_cash_rub|floatformat:"2g" }}</span> / <span class="card">{{ row.total_card_rub|floatformat:"2g" }}</span></div>{% endif %}
         </td>
       </tr>
       {% empty %}
@@ -129,22 +134,24 @@
   </div>
 </div>
 
-{{ daily_days|json_script:"ofd-daily-days" }}
-{{ daily_cash|json_script:"ofd-daily-cash" }}
-{{ daily_card|json_script:"ofd-daily-card" }}
-{{ matrix_day_labels|json_script:"ofd-matrix-days" }}
+{{ period_labels|json_script:"ofd-period-labels" }}
+{{ period_cash|json_script:"ofd-period-cash" }}
+{{ period_card|json_script:"ofd-period-card" }}
+{{ matrix_period_labels|json_script:"ofd-matrix-periods" }}
 {{ matrix_shop_series|json_script:"ofd-matrix-series" }}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
 (() => {
-  const days = JSON.parse(document.getElementById('ofd-daily-days').textContent);
-  const cash = JSON.parse(document.getElementById('ofd-daily-cash').textContent);
-  const card = JSON.parse(document.getElementById('ofd-daily-card').textContent);
-  const matrixDays = JSON.parse(document.getElementById('ofd-matrix-days').textContent);
+  const periodLabels = JSON.parse(document.getElementById('ofd-period-labels').textContent);
+  const cash = JSON.parse(document.getElementById('ofd-period-cash').textContent);
+  const card = JSON.parse(document.getElementById('ofd-period-card').textContent);
+  const matrixPeriods = JSON.parse(document.getElementById('ofd-matrix-periods').textContent);
   const matrixSeries = JSON.parse(document.getElementById('ofd-matrix-series').textContent);
-  const rubTick = (value) => `${value.toFixed(2)} ₽`;
-  const rubTooltip = (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} ₽`;
+  // Same style as the server-rendered table figures: 1 234 567,89
+  const rubFormat = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const rubTick = (value) => `${rubFormat.format(value)} ₽`;
+  const rubTooltip = (ctx) => `${ctx.dataset.label}: ${rubFormat.format(ctx.parsed.y)} ₽`;
   // Cycled per shop; distinct from each other, repeats only past this many shops.
   const PALETTE = [
     '#1565c0', '#2e7d32', '#e65100', '#6a1b9a', '#ad1457', '#00838f',
@@ -153,10 +160,10 @@
   ];
 
   {% if show_split %}
-  new Chart(document.getElementById('ofd-daily-chart'), {
+  new Chart(document.getElementById('ofd-period-chart'), {
     type: 'bar',
     data: {
-      labels: days,
+      labels: periodLabels,
       datasets: [
         { label: 'Наличные', data: cash, backgroundColor: '#4caf50', stack: 'revenue' },
         { label: 'Безналичные', data: card, backgroundColor: '#2196f3', stack: 'revenue' },
@@ -173,10 +180,10 @@
   });
   {% endif %}
 
-  new Chart(document.getElementById('ofd-daily-total-chart'), {
+  new Chart(document.getElementById('ofd-period-total-chart'), {
     type: 'line',
     data: {
-      labels: matrixDays,
+      labels: matrixPeriods,
       datasets: matrixSeries.map((series, i) => ({
         label: series.shop,
         data: series.values,
