@@ -466,10 +466,12 @@ class Writer:
                             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
                             $14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22::jsonb,$23,$24::jsonb
                         )
-                        -- No target: the table has two independent unique keys
-                        -- (fns_id; fiscal_drive_number+shift_number+check_number).
-                        -- Since pages can drift and repeat a receipt across two
-                        -- fetches, either one can be the arbiter that fires.
+                        -- A receipt's identity is fiscal_drive_number +
+                        -- shift_number + check_number. fns_id is NOT unique: the
+                        -- API returns it rounded to float precision, so distinct
+                        -- documents collide on it (see migration 0000012).
+                        -- Pages can drift and repeat a receipt across two
+                        -- fetches; the re-insert is then a no-op.
                         ON CONFLICT DO NOTHING
                         RETURNING id
                         """,
