@@ -71,17 +71,26 @@ _SHOP_LIST_SQL = f"""
 # the zero filter below only drops genuinely empty documents (raw
 # total_kop = 0: shift-open/close reports), never anything based on the
 # post-subtraction amount.
-_PAID_EXPR = "(r.total_kop - r.prepaid_kop)"
+#
+# Refunds (operation_type 2) are netted into revenue, not dropped. OFD stores
+# them with a *negative* total_kop but *positive* cash/ecash/prepaid (checked
+# on prod data: |total| = cash + ecash + prepaid for both sales and refunds),
+# so a refund's paid amount is total + prepaid (= -(cash + ecash)) and its
+# cash/card parts must be negated before summing with the sales.
+_OPERATION_FILTER = "r.operation_type IN (1, 2)"
+_PAID_EXPR = "(CASE r.operation_type WHEN 2 THEN r.total_kop + r.prepaid_kop ELSE r.total_kop - r.prepaid_kop END)"
+_CASH_EXPR = "(CASE r.operation_type WHEN 2 THEN -r.cash_kop ELSE r.cash_kop END)"
+_ECASH_EXPR = "(CASE r.operation_type WHEN 2 THEN -r.ecash_kop ELSE r.ecash_kop END)"
 _ZERO_RECEIPT_FILTER = "AND r.total_kop <> 0"
 
 _SUMMARY_SQL = f"""
     SELECT
         coalesce(sum({_PAID_EXPR}), 0) AS paid_kop,
-        coalesce(sum(r.cash_kop), 0) AS cash_kop,
-        coalesce(sum(r.ecash_kop), 0) AS ecash_kop
+        coalesce(sum({_CASH_EXPR}), 0) AS cash_kop,
+        coalesce(sum({_ECASH_EXPR}), 0) AS ecash_kop
     FROM ofd.receipts r
     {_SHOP_JOIN}
-    WHERE r.operation_type = 1
+    WHERE {_OPERATION_FILTER}
       {_ZERO_RECEIPT_FILTER}
       AND r.date >= %s
       AND r.date < %s
@@ -91,11 +100,11 @@ _SUMMARY_SQL = f"""
 _PERIOD_SQL = f"""
     SELECT
         {{bucket}} AS period_start,
-        coalesce(sum(r.cash_kop), 0) AS cash_kop,
-        coalesce(sum(r.ecash_kop), 0) AS ecash_kop
+        coalesce(sum({_CASH_EXPR}), 0) AS cash_kop,
+        coalesce(sum({_ECASH_EXPR}), 0) AS ecash_kop
     FROM ofd.receipts r
     {_SHOP_JOIN}
-    WHERE r.operation_type = 1
+    WHERE {_OPERATION_FILTER}
       {_ZERO_RECEIPT_FILTER}
       AND r.date >= %s
       AND r.date < %s
@@ -109,11 +118,11 @@ _SHOP_PERIOD_MATRIX_SQL = f"""
         {{bucket}} AS period_start,
         {_SHOP_EXPR} AS shop,
         coalesce(sum({_PAID_EXPR}), 0) AS paid_kop,
-        coalesce(sum(r.cash_kop), 0) AS cash_kop,
-        coalesce(sum(r.ecash_kop), 0) AS ecash_kop
+        coalesce(sum({_CASH_EXPR}), 0) AS cash_kop,
+        coalesce(sum({_ECASH_EXPR}), 0) AS ecash_kop
     FROM ofd.receipts r
     {_SHOP_JOIN}
-    WHERE r.operation_type = 1
+    WHERE {_OPERATION_FILTER}
       {_ZERO_RECEIPT_FILTER}
       AND r.date >= %s
       AND r.date < %s

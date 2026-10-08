@@ -126,6 +126,7 @@ services:
     environment:
       - GF_SERVER_ROOT_URL=https://xn--90aioe3a8b4a.xn--p1ai/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_USERS_DEFAULT_LANGUAGE=ru-RU
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:
